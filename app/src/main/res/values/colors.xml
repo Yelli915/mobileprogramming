@@ -1,5 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="black">#FF000000</color>
+    <!-- 기본 색상 -->
     <color name="white">#FFFFFFFF</color>
+    
+    <!-- 에너제틱 & 스포티 컨셉 색상 팔레트 -->
+    <!-- 메인 컬러 -->
+    <color name="main_orange">#FFFF4C29</color>
+    <!-- 대안 메인 컬러 (필요시 사용) -->
+    <color name="main_neon_green">#FFCEFF00</color>
+    
+    <!-- 포인트/텍스트 -->
+    <color name="accent_white">#FFFFFFFF</color>
+    
+    <!-- 텍스트 색상 -->
+    <color name="text_secondary">#FFFFFFFF</color>
+    <color name="text_tertiary">#B3FFFFFF</color>
+    
+    <!-- 배경 색상 -->
+    <color name="background_dark">#FF1E1E1E</color>
 </resources>
