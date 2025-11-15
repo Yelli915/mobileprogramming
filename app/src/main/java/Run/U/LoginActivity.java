@@ -3,8 +3,6 @@ package Run.U;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.View;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResult;
@@ -17,7 +15,6 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
-import com.google.android.gms.common.SignInButton;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
@@ -42,7 +39,6 @@ public class LoginActivity extends AppCompatActivity {
     private GoogleSignInClient googleSignInClient;
     private ActivityResultLauncher<Intent> googleSignInLauncher;
     private FirebaseFirestore firebaseFirestore;
-    private TextView loginStatusText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,10 +60,8 @@ public class LoginActivity extends AppCompatActivity {
                 this::handleSignInResult
         );
 
-        SignInButton googleSignInButton = findViewById(R.id.google_sign_in_button);
+        android.widget.Button googleSignInButton = findViewById(R.id.google_sign_in_button);
         googleSignInButton.setOnClickListener(v -> signIn());
-        
-        loginStatusText = findViewById(R.id.login_status_text);
     }
 
     @Override
@@ -100,8 +94,26 @@ public class LoginActivity extends AppCompatActivity {
                 Toast.makeText(this, R.string.sign_in_failed, Toast.LENGTH_SHORT).show();
             }
         } catch (ApiException exception) {
-            Log.w(TAG, "Google 로그인 실패", exception);
-            Toast.makeText(this, R.string.sign_in_failed, Toast.LENGTH_SHORT).show();
+            int statusCode = exception.getStatusCode();
+            String errorMessage = "Google 로그인 실패: " + statusCode;
+            Log.w(TAG, errorMessage, exception);
+            
+            String userMessage;
+            switch (statusCode) {
+                case 10: // DEVELOPER_ERROR
+                    userMessage = "구글 로그인 설정 오류가 발생했습니다. 개발자에게 문의하세요.";
+                    break;
+                case 12500: // SIGN_IN_CANCELLED
+                    userMessage = "로그인이 취소되었습니다.";
+                    break;
+                case 7: // NETWORK_ERROR
+                    userMessage = "네트워크 연결을 확인해주세요.";
+                    break;
+                default:
+                    userMessage = getString(R.string.sign_in_failed) + " (오류 코드: " + statusCode + ")";
+                    break;
+            }
+            Toast.makeText(this, userMessage, Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -191,10 +203,7 @@ public class LoginActivity extends AppCompatActivity {
             }
             if (displayName != null && !displayName.isEmpty()) {
                 String successMessage = getString(R.string.sign_in_success, displayName);
-                if (loginStatusText != null) {
-                    loginStatusText.setText(successMessage);
-                    loginStatusText.setVisibility(View.VISIBLE);
-                }
+                Toast.makeText(this, successMessage, Toast.LENGTH_SHORT).show();
             }
         }
         
