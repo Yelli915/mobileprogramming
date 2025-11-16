@@ -19,6 +19,7 @@ public class MainActivity extends AppCompatActivity {
     private FirebaseAuth firebaseAuth;
     private TextView welcomeText;
     private Button settingsButton;
+    private Button startRunButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -30,11 +31,17 @@ public class MainActivity extends AppCompatActivity {
         
         welcomeText = findViewById(R.id.welcome_text);
         settingsButton = findViewById(R.id.settings_button);
+        startRunButton = findViewById(R.id.start_run_button);
         
         updateWelcomeMessage();
         
         settingsButton.setOnClickListener(v -> {
             Intent intent = new Intent(MainActivity.this, SettingsActivity.class);
+            startActivity(intent);
+        });
+        
+        startRunButton.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, MapActivity.class);
             startActivity(intent);
         });
         

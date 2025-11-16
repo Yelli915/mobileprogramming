@@ -56,13 +56,15 @@
         android:gravity="center"
         android:padding="24dp">
 
-        <!-- 메인 콘텐츠가 여기에 추가됩니다 -->
-        <TextView
-            android:layout_width="wrap_content"
+        <Button
+            android:id="@+id/start_run_button"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="메인 화면"
+            android:text="운동 시작"
             android:textSize="18sp"
-            android:textColor="@color/accent_white" />
+            android:textStyle="bold"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp" />
 
     </LinearLayout>
 
