@@ -1,3 +1,5 @@
+import com.android.build.gradle.internal.cxx.configure.gradleLocalProperties;
+
 plugins {
     alias(libs.plugins.android.application)
     id("com.google.gms.google-services")
@@ -17,7 +19,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
+
+        manifestPlaceholders["googleMapsApiKey"] =
+            gradleLocalProperties(rootDir, providers).getProperty("GOOGLE_MAPS_API_KEY") ?: ""}
+
 
     buildTypes {
         release {
