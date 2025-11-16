@@ -61,7 +61,6 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void performLogout() {
         firebaseAuth.signOut();
-
         googleSignInClient.signOut().addOnCompleteListener(this, task -> {
             Intent intent = new Intent(SettingsActivity.this, LoginActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
