@@ -2,10 +2,9 @@ package Run.U;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.MenuItem;
 import android.widget.Button;
-import android.widget.ImageButton;
 
-import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -22,33 +21,24 @@ public class SettingsActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
-
-        // layout_header_back의 뒤로가기 버튼 처리
-        ImageButton backButton = findViewById(R.id.backButton);
-        if (backButton != null) {
-            backButton.setOnClickListener(v -> navigateToHome());
-        }
-
-        // 시스템 뒤로가기 버튼 처리
-        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-            @Override
-            public void handleOnBackPressed() {
-                navigateToHome();
-            }
-        });
+        
+        // ActionBar는 레이아웃에서 직접 구현됨
 
         firebaseAuth = GoogleSignInUtils.getAuth();
+
         googleSignInClient = GoogleSignInUtils.getGoogleSignInClient(this);
 
         logoutButton = findViewById(R.id.logout_button);
         logoutButton.setOnClickListener(v -> showLogoutDialog());
     }
 
-    private void navigateToHome() {
-        Intent intent = new Intent(this, MainActivity.class);
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        startActivity(intent);
-        finish();
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == android.R.id.home) {
+            finish();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 
     private void showLogoutDialog() {
@@ -70,3 +60,4 @@ public class SettingsActivity extends AppCompatActivity {
         });
     }
 }
+
