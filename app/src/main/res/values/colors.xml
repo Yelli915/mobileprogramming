@@ -13,11 +13,15 @@
     <color name="accent_white">#FFFFFFFF</color>
     
     <!-- 텍스트 색상 -->
+    <color name="text_primary">#FF000000</color>
     <color name="text_secondary">#FFFFFFFF</color>
+    <color name="text_secondary_gray">#FF666666</color>
     <color name="text_tertiary">#B3FFFFFF</color>
+    <color name="text_tertiary_gray">#FF333333</color>
     
     <!-- 배경 색상 -->
     <color name="background_dark">#FF1E1E1E</color>
+    <color name="card_background_dark">#FF2A2A2A</color>
 
     <!-- 네온 팔레트 -->
     <color name="neon_orange_start">#FFFD8C3E</color>
@@ -25,4 +29,7 @@
     <color name="neon_orange_pressed_start">#FFE57935</color>
     <color name="neon_orange_pressed_end">#FFFCC34D</color>
     <color name="neon_glow_soft">#33FF9F6E</color>
+    
+    <!-- 3_mob 추가 색상 -->
+    <color name="primary_color">#2196F3</color>
 </resources>

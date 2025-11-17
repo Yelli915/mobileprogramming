@@ -1,8 +1,19 @@
 package Run.U;
 
 import android.content.Intent;
+import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.TextPaint;
+import android.text.method.LinkMovementMethod;
+import android.text.style.ClickableSpan;
+import android.text.style.ForegroundColorSpan;
 import android.util.Log;
+import android.view.View;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResult;
@@ -10,11 +21,11 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
@@ -39,6 +50,9 @@ public class LoginActivity extends AppCompatActivity {
     private GoogleSignInClient googleSignInClient;
     private ActivityResultLauncher<Intent> googleSignInLauncher;
     private FirebaseFirestore firebaseFirestore;
+    private ViewPager2 viewPager;
+    private LinearLayout pageIndicator;
+    private TextView termsNoticeText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,12 +62,7 @@ public class LoginActivity extends AppCompatActivity {
         firebaseAuth = FirebaseAuth.getInstance();
         firebaseFirestore = FirebaseFirestore.getInstance();
 
-        GoogleSignInOptions googleSignInOptions = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestIdToken(getString(R.string.default_web_client_id))
-                .requestEmail()
-                .build();
-
-        googleSignInClient = GoogleSignIn.getClient(this, googleSignInOptions);
+        googleSignInClient = GoogleSignInUtils.getGoogleSignInClient(this);
 
         googleSignInLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
@@ -62,6 +71,123 @@ public class LoginActivity extends AppCompatActivity {
 
         android.widget.Button googleSignInButton = findViewById(R.id.google_sign_in_button);
         googleSignInButton.setOnClickListener(v -> signIn());
+
+        setupOnboardingCarousel();
+        setupTermsNotice();
+    }
+
+    private void setupOnboardingCarousel() {
+        viewPager = findViewById(R.id.onboarding_viewpager);
+        pageIndicator = findViewById(R.id.page_indicator);
+
+        OnboardingAdapter adapter = new OnboardingAdapter();
+        viewPager.setAdapter(adapter);
+
+        int slideCount = adapter.getItemCount();
+        for (int i = 0; i < slideCount; i++) {
+            View dot = new View(this);
+            int size = (int) (8 * getResources().getDisplayMetrics().density);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(size, size);
+            params.setMargins(size / 2, 0, size / 2, 0);
+            dot.setLayoutParams(params);
+            dot.setBackgroundResource(R.drawable.page_indicator_dot);
+            dot.setAlpha(0.3f);
+            pageIndicator.addView(dot);
+        }
+
+        updatePageIndicator(0);
+
+        viewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
+            @Override
+            public void onPageSelected(int position) {
+                super.onPageSelected(position);
+                updatePageIndicator(position);
+            }
+        });
+    }
+
+    private void updatePageIndicator(int position) {
+        for (int i = 0; i < pageIndicator.getChildCount(); i++) {
+            View dot = pageIndicator.getChildAt(i);
+            if (i == position) {
+                dot.setAlpha(1.0f);
+            } else {
+                dot.setAlpha(0.3f);
+            }
+        }
+    }
+
+    private void setupTermsNotice() {
+        termsNoticeText = findViewById(R.id.terms_notice_text);
+        String fullText = "로그인 시 " + getString(R.string.terms_of_service) + " 및 " + getString(R.string.privacy_policy) + "에 동의하게 됩니다.";
+        SpannableString spannableString = new SpannableString(fullText);
+
+        String termsText = getString(R.string.terms_of_service);
+        String privacyText = getString(R.string.privacy_policy);
+
+        int termsStart = fullText.indexOf(termsText);
+        int termsEnd = termsStart + termsText.length();
+        int privacyStart = fullText.indexOf(privacyText);
+        int privacyEnd = privacyStart + privacyText.length();
+
+        ClickableSpan termsClickableSpan = new ClickableSpan() {
+            @Override
+            public void onClick(@NonNull View widget) {
+                openTermsOfService();
+            }
+
+            @Override
+            public void updateDrawState(@NonNull TextPaint ds) {
+                super.updateDrawState(ds);
+                ds.setColor(Color.parseColor("#FFFF4C29"));
+                ds.setUnderlineText(true);
+            }
+        };
+
+        ClickableSpan privacyClickableSpan = new ClickableSpan() {
+            @Override
+            public void onClick(@NonNull View widget) {
+                openPrivacyPolicy();
+            }
+
+            @Override
+            public void updateDrawState(@NonNull TextPaint ds) {
+                super.updateDrawState(ds);
+                ds.setColor(Color.parseColor("#FFFF4C29"));
+                ds.setUnderlineText(true);
+            }
+        };
+
+        if (termsStart >= 0) {
+            spannableString.setSpan(termsClickableSpan, termsStart, termsEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            spannableString.setSpan(new ForegroundColorSpan(Color.parseColor("#FFFF4C29")), termsStart, termsEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+
+        if (privacyStart >= 0) {
+            spannableString.setSpan(privacyClickableSpan, privacyStart, privacyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            spannableString.setSpan(new ForegroundColorSpan(Color.parseColor("#FFFF4C29")), privacyStart, privacyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+
+        termsNoticeText.setText(spannableString);
+        termsNoticeText.setMovementMethod(LinkMovementMethod.getInstance());
+    }
+
+    private void openTermsOfService() {
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.example.com/terms"));
+        try {
+            startActivity(intent);
+        } catch (Exception e) {
+            Toast.makeText(this, "이용약관 페이지를 열 수 없습니다.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void openPrivacyPolicy() {
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.example.com/privacy"));
+        try {
+            startActivity(intent);
+        } catch (Exception e) {
+            Toast.makeText(this, "개인정보처리방침 페이지를 열 수 없습니다.", Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override
@@ -69,7 +195,12 @@ public class LoginActivity extends AppCompatActivity {
         super.onStart();
         FirebaseUser currentUser = firebaseAuth.getCurrentUser();
         if (currentUser != null) {
-            updateUserInFirestore(currentUser);
+            // 이미 로그인되어 있으면 MainActivity로 이동
+            Intent intent = new Intent(LoginActivity.this, MainActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+            finish();
+            return;
         }
     }
 
@@ -109,6 +240,9 @@ public class LoginActivity extends AppCompatActivity {
                 case 7: // NETWORK_ERROR
                     userMessage = "네트워크 연결을 확인해주세요.";
                     break;
+                case 8: // INTERNAL_ERROR
+                    userMessage = "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+                    break;
                 default:
                     userMessage = getString(R.string.sign_in_failed) + " (오류 코드: " + statusCode + ")";
                     break;
@@ -133,7 +267,17 @@ public class LoginActivity extends AppCompatActivity {
                             updateUserInFirestore(user);
                         } else {
                             Log.w(TAG, "Firebase 인증 실패", task.getException());
-                            Toast.makeText(LoginActivity.this, R.string.firebase_auth_failed, Toast.LENGTH_SHORT).show();
+                            Exception exception = task.getException();
+                            String errorMessage = getString(R.string.firebase_auth_failed);
+                            if (exception != null) {
+                                String exceptionMessage = exception.getMessage();
+                                if (exceptionMessage != null && exceptionMessage.contains("network")) {
+                                    errorMessage = "네트워크 연결을 확인해주세요.";
+                                } else if (exceptionMessage != null && exceptionMessage.contains("invalid")) {
+                                    errorMessage = "인증 정보가 유효하지 않습니다.";
+                                }
+                            }
+                            Toast.makeText(LoginActivity.this, errorMessage, Toast.LENGTH_SHORT).show();
                         }
                     }
                 });
@@ -215,4 +359,3 @@ public class LoginActivity extends AppCompatActivity {
         }, 2000);
     }
 }
-

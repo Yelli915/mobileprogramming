@@ -17,23 +17,23 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp">
 
-            <Button
-                android:id="@+id/btn_back"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+            <ImageButton
+                android:id="@+id/backButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:layout_alignParentStart="true"
                 android:layout_centerVertical="true"
+                android:src="@android:drawable/ic_menu_revert"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:drawableStart="@android:drawable/ic_menu_revert"
-                android:text=""
-                android:minWidth="48dp"
-                android:minHeight="48dp" />
+                android:contentDescription="뒤로가기"
+                android:scaleType="centerInside"
+                android:padding="12dp" />
 
             <TextView
                 android:id="@+id/tv_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_toEndOf="@id/btn_back"
+                android:layout_toEndOf="@id/backButton"
                 android:layout_centerVertical="true"
                 android:layout_marginStart="16dp"
                 android:text="러닝 기록 조회"
@@ -70,7 +70,7 @@
                 android:layout_marginEnd="8dp"
                 android:text="경로별"
                 android:textSize="14sp"
-                android:drawableTop="@android:drawable/ic_menu_mylocation"
+                android:drawableTop="@android:drawable/ic_menu_myplaces"
                 android:gravity="center"
                 android:background="@drawable/button_filter_background" />
 
@@ -137,17 +137,21 @@
             android:textStyle="bold"
             android:layout_marginBottom="8dp" />
 
-        <LinearLayout
+        <GridLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
+            android:columnCount="2"
+            android:rowCount="1"
+            android:alignmentMode="alignMargins"
+            android:columnOrderPreserved="false"
+            android:useDefaultMargins="false"
             android:layout_marginBottom="16dp">
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginEnd="8dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="4dp"
                 android:orientation="vertical"
                 android:background="@drawable/card_background"
                 android:padding="16dp">
@@ -179,8 +183,8 @@
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="4dp"
                 android:orientation="vertical"
                 android:background="@drawable/card_background"
                 android:padding="16dp">
@@ -209,7 +213,7 @@
 
             </LinearLayout>
 
-        </LinearLayout>
+        </GridLayout>
 
         <!-- 전체 통계 -->
         <TextView
@@ -220,17 +224,21 @@
             android:textStyle="bold"
             android:layout_marginBottom="8dp" />
 
-        <LinearLayout
+        <GridLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
+            android:columnCount="2"
+            android:rowCount="1"
+            android:alignmentMode="alignMargins"
+            android:columnOrderPreserved="false"
+            android:useDefaultMargins="false"
             android:layout_marginBottom="16dp">
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginEnd="8dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="4dp"
                 android:orientation="vertical"
                 android:background="@drawable/card_background"
                 android:padding="16dp"
@@ -256,9 +264,8 @@
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:layout_marginEnd="8dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="4dp"
                 android:orientation="vertical"
                 android:background="@drawable/card_background"
                 android:padding="16dp"
@@ -281,37 +288,40 @@
 
             </LinearLayout>
 
-        </LinearLayout>
+        </GridLayout>
 
         <!-- 액션 버튼들 -->
         <Button
             android:id="@+id/btn_rate"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
+            android:layout_height="52dp"
             android:text="별점 평가하기"
             android:textSize="16sp"
+            android:textAllCaps="false"
             android:background="@drawable/button_outline_background"
-            android:textColor="@android:color/black" />
+            android:textColor="@color/text_primary"
+            android:layout_marginBottom="12dp" />
 
         <Button
             android:id="@+id/btn_share"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
+            android:layout_height="52dp"
             android:text="공유하기"
             android:textSize="16sp"
+            android:textAllCaps="false"
             android:background="@drawable/button_outline_background"
-            android:textColor="@android:color/black" />
+            android:textColor="@color/text_primary"
+            android:layout_marginBottom="12dp" />
 
         <Button
             android:id="@+id/btn_view_more"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="52dp"
             android:text="더 많은 기록 보기"
             android:textSize="16sp"
-            android:background="@drawable/button_primary_background"
-            android:textColor="@android:color/white" />
+            android:textAllCaps="false"
+            android:background="@drawable/button_neon_orange"
+            android:textColor="@color/accent_white" />
 
     </LinearLayout>
 

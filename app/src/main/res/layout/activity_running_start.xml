@@ -4,22 +4,20 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#FFFFFF">
+    android:background="@android:color/white">
 
-    <!-- Header with back button and title -->
+    <!-- Header: 뒤로가기 버튼과 제목 -->
     <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:gravity="center_vertical"
-        android:background="#FFFFFF">
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp">
 
         <ImageButton
             android:id="@+id/backButton"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
             android:src="@android:drawable/ic_menu_revert"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="뒤로가기"
@@ -27,13 +25,15 @@
             android:padding="12dp" />
 
         <TextView
+            android:id="@+id/tv_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_centerInParent="true"
+            android:layout_toEndOf="@id/backButton"
+            android:layout_centerVertical="true"
+            android:layout_marginStart="16dp"
             android:text="러닝 시작"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:textColor="#000000" />
+            android:textSize="20sp"
+            android:textStyle="bold" />
 
     </RelativeLayout>
 
@@ -52,16 +52,15 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:padding="16dp"
-        android:background="#FFFFFF">
+        android:background="@android:color/white">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="실시간 기록"
-            android:textSize="16sp"
+            android:textSize="18sp"
             android:textStyle="bold"
-            android:textColor="#000000"
-            android:layout_marginBottom="12dp" />
+            android:layout_marginBottom="8dp" />
 
         <GridLayout
             android:layout_width="match_parent"
@@ -88,7 +87,7 @@
                     android:layout_height="wrap_content"
                     android:text="타이머"
                     android:textSize="14sp"
-                    android:textColor="#666666"
+                    android:textColor="@android:color/darker_gray"
                     android:layout_marginBottom="8dp" />
 
                 <TextView
@@ -97,8 +96,7 @@
                     android:layout_height="wrap_content"
                     android:text="00:00:00"
                     android:textSize="24sp"
-                    android:textStyle="bold"
-                    android:textColor="#000000" />
+                    android:textStyle="bold" />
 
             </LinearLayout>
 
@@ -118,7 +116,7 @@
                     android:layout_height="wrap_content"
                     android:text="거리"
                     android:textSize="14sp"
-                    android:textColor="#666666"
+                    android:textColor="@android:color/darker_gray"
                     android:layout_marginBottom="8dp" />
 
                 <TextView
@@ -127,8 +125,7 @@
                     android:layout_height="wrap_content"
                     android:text="0.00 km"
                     android:textSize="24sp"
-                    android:textStyle="bold"
-                    android:textColor="#000000" />
+                    android:textStyle="bold" />
 
             </LinearLayout>
 
@@ -148,7 +145,7 @@
                     android:layout_height="wrap_content"
                     android:text="평균 페이스"
                     android:textSize="14sp"
-                    android:textColor="#666666"
+                    android:textColor="@android:color/darker_gray"
                     android:layout_marginBottom="8dp" />
 
                 <TextView
@@ -157,8 +154,7 @@
                     android:layout_height="wrap_content"
                     android:text="--:--/km"
                     android:textSize="24sp"
-                    android:textStyle="bold"
-                    android:textColor="#000000" />
+                    android:textStyle="bold" />
 
             </LinearLayout>
 
@@ -178,7 +174,7 @@
                     android:layout_height="wrap_content"
                     android:text="순간 페이스"
                     android:textSize="14sp"
-                    android:textColor="#666666"
+                    android:textColor="@android:color/darker_gray"
                     android:layout_marginBottom="8dp" />
 
                 <TextView
@@ -187,8 +183,7 @@
                     android:layout_height="wrap_content"
                     android:text="--:--/km"
                     android:textSize="24sp"
-                    android:textStyle="bold"
-                    android:textColor="#000000" />
+                    android:textStyle="bold" />
 
             </LinearLayout>
 
@@ -202,37 +197,40 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:padding="16dp"
-        android:background="#FFFFFF">
+        android:background="@android:color/white">
 
         <Button
             android:id="@+id/pauseButton"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="52dp"
             android:text="일시 정지"
             android:textSize="16sp"
-            android:textColor="#000000"
-            android:background="@drawable/button_outline"
+            android:textColor="@color/text_primary"
+            android:background="@drawable/button_outline_background"
+            android:textAllCaps="false"
             android:layout_marginBottom="12dp"
             android:enabled="false" />
 
         <Button
             android:id="@+id/endRunButton"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="52dp"
             android:text="러닝 종료"
             android:textSize="16sp"
-            android:textColor="#000000"
-            android:background="@drawable/button_outline"
+            android:textColor="@color/text_primary"
+            android:background="@drawable/button_outline_background"
+            android:textAllCaps="false"
             android:layout_marginBottom="12dp" />
 
         <Button
             android:id="@+id/startTimerButton"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="52dp"
             android:text="타이머 시작"
             android:textSize="16sp"
-            android:textColor="#FFFFFF"
-            android:background="@drawable/button_solid" />
+            android:textColor="@color/accent_white"
+            android:background="@drawable/button_neon_orange"
+            android:textAllCaps="false" />
 
     </LinearLayout>
 
