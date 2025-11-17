@@ -6,4 +6,12 @@
     </style>
 
     <style name="Theme.RunU" parent="Base.Theme.RunU" />
+
+    <!-- Splash theme (Android 12+) -->
+    <style name="Theme.RunU.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@drawable/bg_splash</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_runu_logo</item>
+        <item name="windowSplashScreenAnimationDuration">700</item>
+        <item name="postSplashScreenTheme">@style/Theme.RunU</item>
+    </style>
 </resources>

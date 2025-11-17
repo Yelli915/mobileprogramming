@@ -10,6 +10,9 @@
     <string name="firebase_auth_failed">Firebase 인증에 실패했습니다.</string>
     <string name="sign_in_success">%1$s님, 환영합니다!</string>
     <string name="terms_notice">로그인 시 이용약관 및 개인정보처리방침에 동의하게 됩니다.</string>
+    <string name="terms_of_service">이용약관</string>
+    <string name="privacy_policy">개인정보처리방침</string>
+    <string name="slide_image_description">온보딩 슬라이드 이미지</string>
     
     <!-- 메인 화면 -->
     <string name="welcome_message">%1$s님, 안녕하세요!</string>

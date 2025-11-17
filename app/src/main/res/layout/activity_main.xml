@@ -1,71 +1,85 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/background_dark"
+    android:background="@drawable/bg_dark_neon"
     tools:context=".MainActivity">
 
-    <!-- 헤더 영역: 환영 메시지 + 설정 버튼 -->
-    <LinearLayout
+    <!-- Header: 환영 메시지 + 설정 버튼 -->
+    <RelativeLayout
         android:id="@+id/header_layout"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
         android:paddingStart="24dp"
         android:paddingEnd="24dp"
-        android:paddingTop="16dp"
+        android:paddingTop="24dp"
         android:paddingBottom="16dp"
-        android:background="@color/background_dark">
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
 
         <TextView
             android:id="@+id/welcome_text"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/welcome_message"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:textColor="@color/accent_white"
-            android:maxLines="1"
-            android:ellipsize="end" />
-
-        <Button
-            android:id="@+id/settings_button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/settings"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:text="@string/welcome_message"
+            android:textSize="24sp"
+            android:textStyle="bold"
             android:textColor="@color/accent_white"
-            android:textSize="16sp"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:lineSpacingExtra="4dp" />
+
+        <ImageButton
+            android:id="@+id/settings_button"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:src="@android:drawable/ic_menu_preferences"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/settings"
-            android:padding="12dp" />
+            app:tint="@color/accent_white"
+            android:padding="8dp" />
 
-    </LinearLayout>
+    </RelativeLayout>
 
     <!-- 메인 콘텐츠 영역 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:padding="24dp">
+    <androidx.cardview.widget.CardView
+        android:id="@+id/main_card"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginTop="32dp"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="8dp"
+        app:cardBackgroundColor="@color/card_background_dark"
+        app:layout_constraintTop_toBottomOf="@id/header_layout"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
 
-        <Button
-            android:id="@+id/start_run_button"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="운동 시작"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:padding="16dp"
-            android:layout_marginBottom="16dp" />
+            android:orientation="vertical"
+            android:padding="24dp"
+            android:gravity="center">
 
-    </LinearLayout>
+            <Button
+                android:id="@+id/start_run_button"
+                style="@style/ButtonPrimary"
+                android:text="운동 시작"
+                android:textStyle="bold" />
 
-</LinearLayout>
+        </LinearLayout>
+
+    </androidx.cardview.widget.CardView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
