@@ -18,4 +18,11 @@
     
     <!-- 배경 색상 -->
     <color name="background_dark">#FF1E1E1E</color>
+
+    <!-- 네온 팔레트 -->
+    <color name="neon_orange_start">#FFFD8C3E</color>
+    <color name="neon_orange_end">#FFFFD166</color>
+    <color name="neon_orange_pressed_start">#FFE57935</color>
+    <color name="neon_orange_pressed_end">#FFFCC34D</color>
+    <color name="neon_glow_soft">#33FF9F6E</color>
 </resources>

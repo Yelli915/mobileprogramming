@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center_horizontal"
-    android:background="@color/background_dark"
+    android:background="@drawable/bg_dark_neon"
     android:paddingStart="24dp"
     android:paddingEnd="24dp"
     android:paddingTop="80dp"
@@ -28,7 +28,11 @@
             android:textSize="32sp"
             android:textStyle="bold"
             android:textColor="@color/main_orange"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="16dp"
+            android:shadowColor="@color/neon_glow_soft"
+            android:shadowDx="0"
+            android:shadowDy="0"
+            android:shadowRadius="8" />
 
         <TextView
             android:id="@+id/app_tagline_text"
@@ -53,7 +57,7 @@
             android:id="@+id/google_sign_in_button"
             android:layout_width="match_parent"
             android:layout_height="52dp"
-            android:background="@drawable/button_google_login"
+            android:background="@drawable/button_neon_orange"
             android:text="@string/sign_in_with_google"
             android:textColor="@color/accent_white"
             android:textSize="16sp"

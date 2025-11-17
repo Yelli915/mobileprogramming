@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Base dark background -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#FF0D0F14" />
+        </shape>
+    </item>
+
+    <!-- Top-right radial glow -->
+    <item android:gravity="top|end">
+        <shape android:shape="rectangle">
+            <size android:width="600dp" android:height="600dp" />
+            <gradient
+                android:type="radial"
+                android:gradientRadius="420dp"
+                android:centerX="1"
+                android:centerY="0"
+                android:startColor="#33FFC36F"
+                android:endColor="#00000000" />
+        </shape>
+    </item>
+
+    <!-- Bottom-left radial glow -->
+    <item android:gravity="bottom|start">
+        <shape android:shape="rectangle">
+            <size android:width="520dp" android:height="520dp" />
+            <gradient
+                android:type="radial"
+                android:gradientRadius="380dp"
+                android:centerX="0"
+                android:centerY="1"
+                android:startColor="#33FF8C3E"
+                android:endColor="#00000000" />
+        </shape>
+    </item>
+
+    <!-- Diagonal subtle linear tint -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:angle="315"
+                android:startColor="#00000000"
+                android:endColor="#14000000" />
+        </shape>
+    </item>
+</layer-list>
+
