@@ -14,11 +14,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.RunU">
 
-        <!-- Google Maps API Key -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyCw_d9JO3tcFxLS8JWRRPIalBbdfudpw3Y" />
-        <!-- LAUNCHER Activity -->
+            android:value="${googleMapsApiKey}" />
+            
         <activity
             android:name=".LoginActivity"
             android:exported="true">
@@ -28,7 +27,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Internal Activities -->
         <activity
             android:name=".MainActivity"
             android:exported="false" />
@@ -38,12 +36,14 @@
         <activity
             android:name=".RunningStartActivity"
             android:exported="false" />
+
         <activity
             android:name=".RunningRecordActivity"
             android:exported="false" />
         <activity
             android:name=".SketchRunActivity"
             android:exported="false" />
+            
     </application>
 
 </manifest>
