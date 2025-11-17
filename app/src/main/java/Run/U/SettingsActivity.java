@@ -24,7 +24,7 @@ public class SettingsActivity extends AppCompatActivity {
         
         // ActionBar는 레이아웃에서 직접 구현됨
 
-        firebaseAuth = FirebaseAuth.getInstance();
+        firebaseAuth = GoogleSignInUtils.getAuth();
 
         googleSignInClient = GoogleSignInUtils.getGoogleSignInClient(this);
 

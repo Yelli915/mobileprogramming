@@ -37,6 +37,14 @@ public class RunningRecordAdapter extends RecyclerView.Adapter<RunningRecordAdap
             timeText = itemView.findViewById(R.id.tv_record_time);
             paceText = itemView.findViewById(R.id.tv_record_pace);
         }
+
+        void bind(RunningRecord record) {
+            dateText.setText(record.getDate());
+            distanceText.setText(record.getDistanceFormatted() + " - " + record.getRunningType());
+            runningTypeText.setText(record.getRunningType());
+            timeText.setText("시간: " + record.getTimeFormatted());
+            paceText.setText("평균 페이스: " + record.getPaceFormatted());
+        }
     }
 
     @NonNull
@@ -50,12 +58,7 @@ public class RunningRecordAdapter extends RecyclerView.Adapter<RunningRecordAdap
     @Override
     public void onBindViewHolder(@NonNull RecordViewHolder holder, int position) {
         RunningRecord record = records.get(position);
-        holder.dateText.setText(record.getDate());
-        holder.distanceText.setText(record.getDistance() + " - " + record.getRunningType());
-        holder.runningTypeText.setText(record.getRunningType());
-        holder.timeText.setText("시간: " + record.getTime());
-        holder.paceText.setText("평균 페이스: " + record.getAveragePace());
-
+        holder.bind(record);
         holder.itemView.setOnClickListener(v -> {
             if (onItemClick != null) {
                 onItemClick.onItemClick(record);

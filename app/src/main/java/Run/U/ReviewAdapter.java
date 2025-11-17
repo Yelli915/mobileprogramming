@@ -28,6 +28,12 @@ public class ReviewAdapter extends RecyclerView.Adapter<ReviewAdapter.ReviewView
             commentTextView = itemView.findViewById(R.id.reviewComment);
             ratingBar = itemView.findViewById(R.id.reviewRatingBar);
         }
+
+        void bind(Review review) {
+            userNameTextView.setText(review.getUserName());
+            commentTextView.setText(review.getComment());
+            ratingBar.setRating(review.getRating());
+        }
     }
 
     @NonNull
@@ -41,9 +47,7 @@ public class ReviewAdapter extends RecyclerView.Adapter<ReviewAdapter.ReviewView
     @Override
     public void onBindViewHolder(@NonNull ReviewViewHolder holder, int position) {
         Review review = reviews.get(position);
-        holder.userNameTextView.setText(review.getUserName());
-        holder.commentTextView.setText(review.getComment());
-        holder.ratingBar.setRating(review.getRating());
+        holder.bind(review);
     }
 
     @Override

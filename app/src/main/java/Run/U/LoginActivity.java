@@ -1,5 +1,6 @@
 package Run.U;
 
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
@@ -14,7 +15,6 @@ import android.util.Log;
 import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
@@ -45,6 +45,7 @@ import java.util.Map;
 public class LoginActivity extends AppCompatActivity {
 
     private static final String TAG = "GoogleSignIn";
+    private static final String COLOR_ACCENT = "#FFFF4C29";
 
     private FirebaseAuth firebaseAuth;
     private GoogleSignInClient googleSignInClient;
@@ -53,14 +54,16 @@ public class LoginActivity extends AppCompatActivity {
     private ViewPager2 viewPager;
     private LinearLayout pageIndicator;
     private TextView termsNoticeText;
+    private boolean isSigningIn = false;
+    private android.widget.Button googleSignInButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
 
-        firebaseAuth = FirebaseAuth.getInstance();
-        firebaseFirestore = FirebaseFirestore.getInstance();
+        firebaseAuth = GoogleSignInUtils.getAuth();
+        firebaseFirestore = GoogleSignInUtils.getFirestore();
 
         googleSignInClient = GoogleSignInUtils.getGoogleSignInClient(this);
 
@@ -69,8 +72,29 @@ public class LoginActivity extends AppCompatActivity {
                 this::handleSignInResult
         );
 
-        android.widget.Button googleSignInButton = findViewById(R.id.google_sign_in_button);
-        googleSignInButton.setOnClickListener(v -> signIn());
+        googleSignInButton = findViewById(R.id.google_sign_in_button);
+        if (googleSignInButton != null) {
+            googleSignInButton.setOnClickListener(v -> {
+                // 중복 클릭 방지
+                if (isSigningIn) {
+                    Log.d(TAG, "로그인 진행 중입니다.");
+                    return;
+                }
+                
+                // 즉시 UI 업데이트 (버튼 비활성화)
+                setSigningInState(true);
+                
+                // 네트워크 확인을 비동기로 처리하거나 빠르게 체크
+                if (GoogleSignInUtils.isNetworkAvailable(LoginActivity.this)) {
+                    signIn();
+                } else {
+                    setSigningInState(false);
+                    GoogleSignInUtils.showToast(this, "네트워크 연결을 확인해주세요.");
+                }
+            });
+        } else {
+            Log.e(TAG, "Google 로그인 버튼을 찾을 수 없습니다.");
+        }
 
         setupOnboardingCarousel();
         setupTermsNotice();
@@ -130,104 +154,160 @@ public class LoginActivity extends AppCompatActivity {
         int privacyStart = fullText.indexOf(privacyText);
         int privacyEnd = privacyStart + privacyText.length();
 
-        ClickableSpan termsClickableSpan = new ClickableSpan() {
-            @Override
-            public void onClick(@NonNull View widget) {
-                openTermsOfService();
-            }
-
-            @Override
-            public void updateDrawState(@NonNull TextPaint ds) {
-                super.updateDrawState(ds);
-                ds.setColor(Color.parseColor("#FFFF4C29"));
-                ds.setUnderlineText(true);
-            }
-        };
-
-        ClickableSpan privacyClickableSpan = new ClickableSpan() {
-            @Override
-            public void onClick(@NonNull View widget) {
-                openPrivacyPolicy();
-            }
-
-            @Override
-            public void updateDrawState(@NonNull TextPaint ds) {
-                super.updateDrawState(ds);
-                ds.setColor(Color.parseColor("#FFFF4C29"));
-                ds.setUnderlineText(true);
-            }
-        };
+        ClickableSpan termsClickableSpan = createClickableSpan(this::openTermsOfService);
+        ClickableSpan privacyClickableSpan = createClickableSpan(this::openPrivacyPolicy);
 
         if (termsStart >= 0) {
-            spannableString.setSpan(termsClickableSpan, termsStart, termsEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            spannableString.setSpan(new ForegroundColorSpan(Color.parseColor("#FFFF4C29")), termsStart, termsEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            setClickableSpan(spannableString, termsClickableSpan, termsStart, termsEnd);
         }
 
         if (privacyStart >= 0) {
-            spannableString.setSpan(privacyClickableSpan, privacyStart, privacyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            spannableString.setSpan(new ForegroundColorSpan(Color.parseColor("#FFFF4C29")), privacyStart, privacyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            setClickableSpan(spannableString, privacyClickableSpan, privacyStart, privacyEnd);
         }
 
         termsNoticeText.setText(spannableString);
         termsNoticeText.setMovementMethod(LinkMovementMethod.getInstance());
     }
 
-    private void openTermsOfService() {
-        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.example.com/terms"));
+    private ClickableSpan createClickableSpan(Runnable onClickAction) {
+        return new ClickableSpan() {
+            @Override
+            public void onClick(@NonNull View widget) {
+                onClickAction.run();
+            }
+
+            @Override
+            public void updateDrawState(@NonNull TextPaint ds) {
+                super.updateDrawState(ds);
+                ds.setColor(Color.parseColor(COLOR_ACCENT));
+                ds.setUnderlineText(true);
+            }
+        };
+    }
+
+    private void setClickableSpan(SpannableString spannableString, ClickableSpan clickableSpan, int start, int end) {
+        spannableString.setSpan(clickableSpan, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        spannableString.setSpan(new ForegroundColorSpan(Color.parseColor(COLOR_ACCENT)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+    }
+
+    private void openUrl(String url, String errorMessage) {
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
         try {
             startActivity(intent);
         } catch (Exception e) {
-            Toast.makeText(this, "이용약관 페이지를 열 수 없습니다.", Toast.LENGTH_SHORT).show();
+            GoogleSignInUtils.showToast(this, errorMessage);
         }
     }
 
+    private void openTermsOfService() {
+        openUrl("https://www.example.com/terms", "이용약관 페이지를 열 수 없습니다.");
+    }
+
     private void openPrivacyPolicy() {
-        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.example.com/privacy"));
-        try {
-            startActivity(intent);
-        } catch (Exception e) {
-            Toast.makeText(this, "개인정보처리방침 페이지를 열 수 없습니다.", Toast.LENGTH_SHORT).show();
-        }
+        openUrl("https://www.example.com/privacy", "개인정보처리방침 페이지를 열 수 없습니다.");
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        // firebaseAuth가 null인 경우 다시 초기화
+        if (firebaseAuth == null) {
+            firebaseAuth = GoogleSignInUtils.getAuth();
+        }
+        
+        // GoogleSignInUtils를 통해 현재 사용자 확인 (일관성 유지)
+        FirebaseUser currentUser = GoogleSignInUtils.getCurrentUser();
         if (currentUser != null) {
             // 이미 로그인되어 있으면 MainActivity로 이동
-            Intent intent = new Intent(LoginActivity.this, MainActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(intent);
-            finish();
+            navigateToMainActivity(false);
             return;
+        }
+    }
+
+    private void setSigningInState(boolean signingIn) {
+        isSigningIn = signingIn;
+        if (googleSignInButton != null) {
+            googleSignInButton.setEnabled(!signingIn);
         }
     }
 
     private void signIn() {
-        Intent signInIntent = googleSignInClient.getSignInIntent();
-        googleSignInLauncher.launch(signInIntent);
+        if (googleSignInClient == null) {
+            Log.e(TAG, "GoogleSignInClient가 초기화되지 않았습니다.");
+            GoogleSignInUtils.showToast(this, "로그인 설정 오류가 발생했습니다.");
+            setSigningInState(false);
+            return;
+        }
+
+        // Intent 생성과 launch를 즉시 실행 (Google SDK가 내부적으로 최적화되어 있음)
+        try {
+            Intent signInIntent = googleSignInClient.getSignInIntent();
+            if (signInIntent != null) {
+                // 즉시 launch하여 UI 응답성 향상
+                googleSignInLauncher.launch(signInIntent);
+            } else {
+                Log.e(TAG, "Google 로그인 Intent를 생성할 수 없습니다.");
+                GoogleSignInUtils.showToast(this, "로그인 설정 오류가 발생했습니다.");
+                setSigningInState(false);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Google 로그인 시작 중 오류 발생", e);
+            GoogleSignInUtils.showToast(this, "로그인 시작 중 오류가 발생했습니다.");
+            setSigningInState(false);
+        }
     }
 
     private void handleSignInResult(ActivityResult result) {
         if (result.getResultCode() != RESULT_OK) {
-            Toast.makeText(this, R.string.sign_in_failed, Toast.LENGTH_SHORT).show();
+            Log.d(TAG, "로그인 결과 코드: " + result.getResultCode());
+            setSigningInState(false);
+            // 사용자가 로그인을 취소한 경우는 조용히 처리
+            if (result.getResultCode() != RESULT_CANCELED) {
+                GoogleSignInUtils.showToast(this, R.string.sign_in_failed);
+            }
             return;
         }
 
         Intent data = result.getData();
+        if (data == null) {
+            Log.e(TAG, "로그인 결과 데이터가 null입니다.");
+            setSigningInState(false);
+            GoogleSignInUtils.showToast(this, R.string.sign_in_failed);
+            return;
+        }
+
         Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
+        if (task == null) {
+            Log.e(TAG, "GoogleSignInAccount Task가 null입니다.");
+            setSigningInState(false);
+            GoogleSignInUtils.showToast(this, R.string.sign_in_failed);
+            return;
+        }
+
+        // Task가 완료된 경우 처리
+        if (task.isComplete()) {
+            handleSignInTask(task);
+        } else {
+            // Task가 아직 완료되지 않은 경우 완료 대기
+            task.addOnCompleteListener(this::handleSignInTask);
+        }
+    }
+
+    private void handleSignInTask(Task<GoogleSignInAccount> task) {
         try {
             GoogleSignInAccount account = task.getResult(ApiException.class);
-            if (account != null) {
+            if (account != null && account.getIdToken() != null) {
                 firebaseAuthWithGoogle(account.getIdToken());
             } else {
-                Toast.makeText(this, R.string.sign_in_failed, Toast.LENGTH_SHORT).show();
+                Log.w(TAG, "GoogleSignInAccount 또는 ID Token이 null입니다.");
+                setSigningInState(false);
+                GoogleSignInUtils.showToast(this, R.string.sign_in_failed);
             }
         } catch (ApiException exception) {
             int statusCode = exception.getStatusCode();
             String errorMessage = "Google 로그인 실패: " + statusCode;
             Log.w(TAG, errorMessage, exception);
+            setSigningInState(false);
             
             String userMessage;
             switch (statusCode) {
@@ -247,115 +327,234 @@ public class LoginActivity extends AppCompatActivity {
                     userMessage = getString(R.string.sign_in_failed) + " (오류 코드: " + statusCode + ")";
                     break;
             }
-            Toast.makeText(this, userMessage, Toast.LENGTH_SHORT).show();
+            GoogleSignInUtils.showToast(this, userMessage);
+        } catch (Exception e) {
+            Log.e(TAG, "로그인 처리 중 예상치 못한 오류 발생", e);
+            setSigningInState(false);
+            GoogleSignInUtils.showToast(this, "로그인 처리 중 오류가 발생했습니다.");
         }
     }
 
     private void firebaseAuthWithGoogle(String idToken) {
-        if (idToken == null) {
-            Toast.makeText(this, R.string.sign_in_failed, Toast.LENGTH_SHORT).show();
+        if (idToken == null || idToken.isEmpty()) {
+            Log.e(TAG, "ID Token이 null이거나 비어있습니다.");
+            setSigningInState(false);
+            GoogleSignInUtils.showToast(this, R.string.sign_in_failed);
             return;
         }
-        AuthCredential credential = GoogleAuthProvider.getCredential(idToken, null);
-        firebaseAuth.signInWithCredential(credential)
-                .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
-                    @Override
-                    public void onComplete(@NonNull Task<AuthResult> task) {
-                        if (task.isSuccessful()) {
-                            FirebaseUser user = firebaseAuth.getCurrentUser();
-                            Log.d(TAG, "Firebase 인증 성공");
-                            updateUserInFirestore(user);
-                        } else {
-                            Log.w(TAG, "Firebase 인증 실패", task.getException());
-                            Exception exception = task.getException();
-                            String errorMessage = getString(R.string.firebase_auth_failed);
-                            if (exception != null) {
-                                String exceptionMessage = exception.getMessage();
-                                if (exceptionMessage != null && exceptionMessage.contains("network")) {
-                                    errorMessage = "네트워크 연결을 확인해주세요.";
-                                } else if (exceptionMessage != null && exceptionMessage.contains("invalid")) {
-                                    errorMessage = "인증 정보가 유효하지 않습니다.";
+
+        if (firebaseAuth == null) {
+            Log.e(TAG, "FirebaseAuth가 null입니다.");
+            setSigningInState(false);
+            GoogleSignInUtils.showToast(this, "인증 서비스 초기화 오류가 발생했습니다.");
+            return;
+        }
+
+        try {
+            AuthCredential credential = GoogleAuthProvider.getCredential(idToken, null);
+            if (credential == null) {
+                Log.e(TAG, "AuthCredential을 생성할 수 없습니다.");
+                GoogleSignInUtils.showToast(this, R.string.sign_in_failed);
+                return;
+            }
+
+            firebaseAuth.signInWithCredential(credential)
+                    .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
+                        @Override
+                        public void onComplete(@NonNull Task<AuthResult> task) {
+                            if (task.isSuccessful()) {
+                                // AuthResult에서 직접 사용자 가져오기 (getCurrentUser()는 때로 null 반환 가능)
+                                AuthResult result = task.getResult();
+                                FirebaseUser user = result != null ? result.getUser() : null;
+                                
+                                if (user == null) {
+                                    // AuthResult에서 가져오기 실패 시 getCurrentUser() 재시도
+                                    user = firebaseAuth.getCurrentUser();
                                 }
+                                
+                                if (user != null) {
+                                    Log.d(TAG, "Firebase 인증 성공: " + user.getEmail());
+                                    updateUserInFirestore(user);
+                                } else {
+                                    Log.w(TAG, "Firebase 인증은 성공했으나 사용자 정보가 null입니다.");
+                                    setSigningInState(false);
+                                    GoogleSignInUtils.showToast(LoginActivity.this, "사용자 정보를 가져올 수 없습니다.");
+                                }
+                            } else {
+                                Log.w(TAG, "Firebase 인증 실패", task.getException());
+                                setSigningInState(false);
+                                Exception exception = task.getException();
+                                String errorMessage = getString(R.string.firebase_auth_failed);
+                                if (exception != null) {
+                                    String exceptionMessage = exception.getMessage();
+                                    if (exceptionMessage != null) {
+                                        if (exceptionMessage.toLowerCase().contains("network") || 
+                                            exceptionMessage.toLowerCase().contains("connect")) {
+                                            errorMessage = "네트워크 연결을 확인해주세요.";
+                                        } else if (exceptionMessage.toLowerCase().contains("invalid") ||
+                                                   exceptionMessage.toLowerCase().contains("credential")) {
+                                            errorMessage = "인증 정보가 유효하지 않습니다.";
+                                        } else if (exceptionMessage.toLowerCase().contains("quota")) {
+                                            errorMessage = "서버 부하로 인해 잠시 후 다시 시도해주세요.";
+                                        }
+                                    }
+                                }
+                                GoogleSignInUtils.showToast(LoginActivity.this, errorMessage);
                             }
-                            Toast.makeText(LoginActivity.this, errorMessage, Toast.LENGTH_SHORT).show();
                         }
-                    }
-                });
+                    });
+        } catch (Exception e) {
+            Log.e(TAG, "Firebase 인증 시작 중 오류 발생", e);
+            setSigningInState(false);
+            GoogleSignInUtils.showToast(this, "인증 처리 중 오류가 발생했습니다.");
+        }
     }
 
     private void updateUserInFirestore(FirebaseUser user) {
         if (user == null) {
-            Toast.makeText(this, R.string.firebase_auth_failed, Toast.LENGTH_SHORT).show();
+            Log.e(TAG, "FirebaseUser가 null입니다.");
+            GoogleSignInUtils.showToast(this, R.string.firebase_auth_failed);
+            return;
+        }
+
+        if (firebaseFirestore == null) {
+            Log.e(TAG, "Firestore가 초기화되지 않았습니다.");
+            navigateToMainActivity(true); // Firestore 저장 실패해도 로그인은 진행
             return;
         }
 
         String uid = user.getUid();
-        DocumentReference userRef = firebaseFirestore.collection("users").document(uid);
+        if (uid == null || uid.isEmpty()) {
+            Log.e(TAG, "사용자 UID가 null이거나 비어있습니다.");
+            navigateToMainActivity(true); // UID 없어도 로그인은 진행
+            return;
+        }
 
+        // 즉시 MainActivity로 이동하고, Firestore 업데이트는 백그라운드에서 처리
+        navigateToMainActivity(true);
+
+        // Firestore 업데이트는 백그라운드에서 비동기로 처리
+        DocumentReference userRef = firebaseFirestore.collection("users").document(uid);
         userRef.get().addOnCompleteListener(task -> {
             if (task.isSuccessful()) {
                 DocumentSnapshot document = task.getResult();
                 if (document != null && document.exists()) {
                     Log.d(TAG, "기존 사용자입니다: " + user.getEmail());
-
-                    Map<String, Object> updates = new HashMap<>();
-                    updates.put("displayName", user.getDisplayName());
-                    updates.put("photoURL", user.getPhotoUrl() != null ? user.getPhotoUrl().toString() : "");
-
-                    userRef.update(updates)
-                            .addOnSuccessListener(unused -> {
-                                Log.d(TAG, "사용자 정보 업데이트 성공");
-                                goToMainActivity();
-                            })
-                            .addOnFailureListener(e -> {
-                                Log.w(TAG, "사용자 정보 업데이트 실패", e);
-                                goToMainActivity();
-                            });
+                    updateExistingUserInBackground(userRef, user);
                 } else {
                     Log.d(TAG, "신규 사용자입니다: " + user.getEmail());
-
-                    Map<String, Object> newUser = new HashMap<>();
-                    newUser.put("email", user.getEmail());
-                    newUser.put("displayName", user.getDisplayName());
-                    newUser.put("photoURL", user.getPhotoUrl() != null ? user.getPhotoUrl().toString() : "");
-                    newUser.put("role", "user");
-                    newUser.put("createdAt", FieldValue.serverTimestamp());
-
-                    userRef.set(newUser)
-                            .addOnSuccessListener(unused -> {
-                                Log.d(TAG, "신규 사용자 정보 Firestore에 저장 성공");
-                                goToMainActivity();
-                            })
-                            .addOnFailureListener(e -> {
-                                Log.w(TAG, "신규 사용자 정보 저장 실패", e);
-                                goToMainActivity();
-                            });
+                    createNewUserInBackground(userRef, user);
                 }
             } else {
                 Log.w(TAG, "Firestore 문서 조회 실패", task.getException());
-                goToMainActivity();
+                // 조회 실패는 조용히 처리 (이미 화면 전환됨)
             }
         });
     }
 
-    private void goToMainActivity() {
-        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
-        if (currentUser != null) {
-            String displayName = currentUser.getDisplayName();
-            if (displayName == null || displayName.isEmpty()) {
-                displayName = currentUser.getEmail();
-            }
-            if (displayName != null && !displayName.isEmpty()) {
-                String successMessage = getString(R.string.sign_in_success, displayName);
-                Toast.makeText(this, successMessage, Toast.LENGTH_SHORT).show();
-            }
+    private Map<String, Object> extractUserData(FirebaseUser user) {
+        Map<String, Object> userData = new HashMap<>();
+        String email = user.getEmail();
+        if (email != null) {
+            userData.put("email", email);
+        }
+        String displayName = user.getDisplayName();
+        if (displayName != null) {
+            userData.put("displayName", displayName);
+        }
+        String photoURL = user.getPhotoUrl() != null ? user.getPhotoUrl().toString() : "";
+        if (photoURL != null && !photoURL.isEmpty()) {
+            userData.put("photoURL", photoURL);
+        }
+        return userData;
+    }
+
+    private void updateExistingUserInBackground(DocumentReference userRef, FirebaseUser user) {
+        Map<String, Object> updates = extractUserData(user);
+        // email은 업데이트에서 제외
+        updates.remove("email");
+
+        if (!updates.isEmpty()) {
+            userRef.update(updates)
+                    .addOnSuccessListener(unused -> {
+                        Log.d(TAG, "사용자 정보 업데이트 성공");
+                    })
+                    .addOnFailureListener(e -> {
+                        Log.w(TAG, "사용자 정보 업데이트 실패", e);
+                        // 백그라운드 업데이트 실패는 조용히 처리
+                    });
+        } else {
+            Log.d(TAG, "업데이트할 내용이 없습니다.");
+        }
+    }
+
+    private void createNewUserInBackground(DocumentReference userRef, FirebaseUser user) {
+        Map<String, Object> newUser = extractUserData(user);
+        newUser.put("role", "user");
+        newUser.put("createdAt", FieldValue.serverTimestamp());
+
+        userRef.set(newUser)
+                .addOnSuccessListener(unused -> {
+                    Log.d(TAG, "신규 사용자 정보 Firestore에 저장 성공");
+                })
+                .addOnFailureListener(e -> {
+                    Log.w(TAG, "신규 사용자 정보 저장 실패", e);
+                    // 백그라운드 저장 실패는 조용히 처리
+                });
+    }
+
+    private void navigateToMainActivity(boolean showSuccessMessage) {
+        setSigningInState(false); // 로그인 상태 초기화
+        
+        // Activity가 이미 종료 중이면 화면 전환 불가
+        if (isFinishing()) {
+            Log.w(TAG, "Activity가 이미 종료 중입니다. 화면 전환 불가.");
+            return;
         }
         
-        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-            Intent intent = new Intent(this, MainActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+        Intent intent = createMainActivityIntent();
+        
+        if (showSuccessMessage) {
+            // 성공 메시지 표시 (Toast는 짧게 표시)
+            // GoogleSignInUtils를 통해 현재 사용자 가져오기 (일관성 유지)
+            FirebaseUser currentUser = GoogleSignInUtils.getCurrentUser();
+            String displayName = GoogleSignInUtils.getUserDisplayName(currentUser);
+            if (displayName != null && !displayName.isEmpty()) {
+                String successMessage = getString(R.string.sign_in_success, displayName);
+                GoogleSignInUtils.showToast(this, successMessage);
+            }
+            // 성공 메시지와 함께 즉시 이동 (딜레이 제거)
+        }
+        
+        // 화면 전환 실행
+        try {
             startActivity(intent);
             finish();
-        }, 2000);
+            Log.d(TAG, "MainActivity로 이동 성공");
+        } catch (Exception e) {
+            Log.e(TAG, "MainActivity로 이동 실패", e);
+            setSigningInState(false);
+            GoogleSignInUtils.showToast(this, "화면 전환 중 오류가 발생했습니다.");
+        }
+    }
+
+    private Intent createMainActivityIntent() {
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+        return intent;
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // 로그인 상태 초기화
+        isSigningIn = false;
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // Activity가 백그라운드로 가도 로그인 프로세스는 계속 진행될 수 있도록
+        // 상태는 유지하되, UI 업데이트는 주의해야 함
     }
 }

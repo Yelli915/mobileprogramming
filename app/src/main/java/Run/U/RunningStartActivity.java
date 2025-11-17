@@ -32,9 +32,8 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.GeoPoint;
 import com.google.firebase.firestore.FieldValue;
+import com.google.firebase.Timestamp;
 import android.util.Log;
-import android.widget.Toast;
-import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -42,7 +41,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 public class RunningStartActivity extends AppCompatActivity implements OnMapReadyCallback {
 
@@ -89,8 +87,6 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
     private FirebaseAuth firebaseAuth;
     private String courseId; // 코스 기반 러닝인 경우
 
-    private DecimalFormat decimalFormat = new DecimalFormat("0.00");
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -105,22 +101,35 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         endRunButton = findViewById(R.id.endRunButton);
         startTimerButton = findViewById(R.id.startTimerButton);
 
+        // Check if views are properly initialized
+        if (timerTextView == null || distanceTextView == null || averagePaceTextView == null 
+                || instantPaceTextView == null || pauseButton == null || endRunButton == null 
+                || startTimerButton == null) {
+            Log.e("RunningStartActivity", "필수 뷰를 찾을 수 없습니다.");
+            GoogleSignInUtils.showToast(this, "화면 초기화 오류가 발생했습니다.");
+            finish();
+            return;
+        }
+
         // Set up back button
-        findViewById(R.id.backButton).setOnClickListener(v -> {
-            if (isRunning) {
-                // 운동 중이면 종료 확인 다이얼로그 표시
-                showExitConfirmationDialog();
-            } else {
-                finish();
-            }
-        });
+        View backButton = findViewById(R.id.backButton);
+        if (backButton != null) {
+            backButton.setOnClickListener(v -> {
+                if (isRunning) {
+                    // 운동 중이면 종료 확인 다이얼로그 표시
+                    showExitConfirmationDialog();
+                } else {
+                    finish();
+                }
+            });
+        }
 
         // Intent에서 코스 정보 받기
         handleCourseIntent();
 
         // Initialize Firestore
-        firestore = FirebaseFirestore.getInstance();
-        firebaseAuth = FirebaseAuth.getInstance();
+        firestore = GoogleSignInUtils.getFirestore();
+        firebaseAuth = GoogleSignInUtils.getAuth();
 
         // Initialize FusedLocationProviderClient
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
@@ -130,6 +139,8 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         SupportMapFragment mapFragment = (SupportMapFragment) fragmentManager.findFragmentById(R.id.mapFragment);
         if (mapFragment != null) {
             mapFragment.getMapAsync(this);
+        } else {
+            Log.w("RunningStartActivity", "MapFragment를 찾을 수 없습니다.");
         }
 
         // Button click listeners
@@ -261,7 +272,7 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         if (lastLocation != null) {
             double distance = lastLocation.distanceTo(newLocation) / 1000.0; // Convert to km
             totalDistance += distance;
-            distanceTextView.setText(decimalFormat.format(totalDistance) + " km");
+            distanceTextView.setText(GoogleSignInUtils.formatDistanceKm(totalDistance));
         }
 
         // 경로 좌표 추가
@@ -298,28 +309,44 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
 
     private void startRunning() {
         if (!isRunning) {
-            isRunning = true;
-            isPaused = false;
-            startTime = System.currentTimeMillis();
-            totalPausedTime = 0;
-            totalDistance = 0.0;
-            lastLocation = null;
-            routePoints.clear(); // 경로 초기화
+            try {
+                isRunning = true;
+                isPaused = false;
+                startTime = System.currentTimeMillis();
+                totalPausedTime = 0;
+                totalDistance = 0.0;
+                lastLocation = null;
+                routePoints.clear(); // 경로 초기화
 
-            // Reset displays
-            distanceTextView.setText("0.00 km");
-            averagePaceTextView.setText("--:--/km");
-            instantPaceTextView.setText("--:--/km");
+                // Reset displays
+                if (distanceTextView != null) {
+                    distanceTextView.setText("0.00 km");
+                }
+                if (averagePaceTextView != null) {
+                    averagePaceTextView.setText("--:--/km");
+                }
+                if (instantPaceTextView != null) {
+                    instantPaceTextView.setText("--:--/km");
+                }
 
-            // Start timer
-            startTimer();
+                // Start timer
+                startTimer();
 
-            // Start location updates
-            getCurrentLocation();
+                // Start location updates
+                getCurrentLocation();
 
-            // Update button states
-            startTimerButton.setEnabled(false);
-            pauseButton.setEnabled(true);
+                // Update button states
+                if (startTimerButton != null) {
+                    startTimerButton.setEnabled(false);
+                }
+                if (pauseButton != null) {
+                    pauseButton.setEnabled(true);
+                }
+            } catch (Exception e) {
+                Log.e("RunningStartActivity", "운동 시작 중 오류 발생", e);
+                GoogleSignInUtils.showToast(this, "운동 시작 중 오류가 발생했습니다.");
+                isRunning = false;
+            }
         }
     }
 
@@ -372,7 +399,7 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
     }
 
     private void saveRunToFirestore(long elapsedTimeMs, String distance, String time, String pace) {
-        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        FirebaseUser currentUser = GoogleSignInUtils.requireCurrentUser(this);
         if (currentUser == null) {
             Log.w("RunningStartActivity", "사용자가 로그인되어 있지 않습니다.");
             return;
@@ -380,34 +407,52 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
 
         String userId = currentUser.getUid();
 
-        // 경로 좌표를 GeoPoint 리스트로 변환
-        List<GeoPoint> routeGeoPoints = new ArrayList<>();
-        for (LatLng point : routePoints) {
-            routeGeoPoints.add(new GeoPoint(point.latitude, point.longitude));
-        }
-
         // Encoded Polyline 생성
         String pathEncoded = PolylineUtils.encode(routePoints);
 
-        // 날짜 문자열 생성
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy년 MM월 dd일", Locale.KOREA);
-        String dateString = sdf.format(new Date());
+        // 시작/종료 시간 계산
+        Date startTimeDate = new Date(startTime);
+        Date endTimeDate = new Date(System.currentTimeMillis());
 
-        // Firestore 문서 데이터
+        // 시작/종료 마커 추출
+        GeoPoint startMarker = null;
+        GeoPoint endMarker = null;
+        if (!routePoints.isEmpty()) {
+            LatLng startPoint = routePoints.get(0);
+            LatLng endPoint = routePoints.get(routePoints.size() - 1);
+            startMarker = new GeoPoint(startPoint.latitude, startPoint.longitude);
+            endMarker = new GeoPoint(endPoint.latitude, endPoint.longitude);
+        }
+
+        // totalDistance: km → 미터 단위 변환
+        double totalDistanceMeters = totalDistance * 1000.0;
+
+        // totalTime: 밀리초 → 초 단위 변환
+        long totalTimeSeconds = elapsedTimeMs / 1000;
+
+        // averagePace: 문자열 "MM:SS/km" → 초 단위 숫자로 변환
+        double averagePaceSeconds = GoogleSignInUtils.parsePaceToSeconds(pace);
+
+        // Firestore 문서 데이터 (데이터베이스 구조에 맞게 수정)
         Map<String, Object> runData = new HashMap<>();
-        runData.put("totalDistanceKm", totalDistance);
-        runData.put("elapsedTimeMs", elapsedTimeMs);
-        runData.put("distance", distance);
-        runData.put("time", time);
-        runData.put("averagePace", pace);
-        runData.put("date", dateString);
-        runData.put("runningType", courseId != null ? "코스 운동" : "일반 운동");
+        runData.put("type", courseId != null ? "sketch" : "free");
+        runData.put("startTime", new Timestamp(startTimeDate));
+        runData.put("endTime", new Timestamp(endTimeDate));
+        runData.put("totalDistance", totalDistanceMeters); // 미터 단위
+        runData.put("totalTime", totalTimeSeconds); // 초 단위
+        runData.put("averagePace", averagePaceSeconds); // km당 초 (숫자)
         runData.put("pathEncoded", pathEncoded);
-        runData.put("routePoints", routeGeoPoints);
-        runData.put("userId", userId);
+        if (startMarker != null) {
+            runData.put("startMarker", startMarker);
+        }
+        if (endMarker != null) {
+            runData.put("endMarker", endMarker);
+        }
         if (courseId != null) {
             runData.put("courseId", courseId);
         }
+        
+        // 호환성을 위해 추가 필드 (선택사항)
         runData.put("createdAt", FieldValue.serverTimestamp());
 
         // users/{uid}/runs 컬렉션에 저장
@@ -420,9 +465,10 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                 })
                 .addOnFailureListener(e -> {
                     Log.w("RunningStartActivity", "러닝 기록 저장 실패", e);
-                    Toast.makeText(this, "기록 저장에 실패했습니다.", Toast.LENGTH_SHORT).show();
+                    GoogleSignInUtils.showToast(this, "기록 저장에 실패했습니다.");
                 });
     }
+
 
     private void startTimer() {
         timerRunnable = new Runnable() {
@@ -446,11 +492,7 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
     }
 
     private void updateTimerDisplay(long elapsedTime) {
-        long hours = TimeUnit.MILLISECONDS.toHours(elapsedTime);
-        long minutes = TimeUnit.MILLISECONDS.toMinutes(elapsedTime) % 60;
-        long seconds = TimeUnit.MILLISECONDS.toSeconds(elapsedTime) % 60;
-
-        timerTextView.setText(String.format("%02d:%02d:%02d", hours, minutes, seconds));
+        timerTextView.setText(GoogleSignInUtils.formatElapsedTime(elapsedTime));
     }
 
     private void updatePace(long elapsedTime) {
@@ -460,9 +502,8 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
 
             // Convert to min/km format
             double averagePaceMinPerKm = 60.0 / averagePace;
-            int avgMinutes = (int) averagePaceMinPerKm;
-            int avgSeconds = (int) ((averagePaceMinPerKm - avgMinutes) * 60);
-            averagePaceTextView.setText(String.format("%02d:%02d/km", avgMinutes, avgSeconds));
+            double averagePaceSeconds = averagePaceMinPerKm * 60.0;
+            averagePaceTextView.setText(GoogleSignInUtils.formatPaceFromSeconds(averagePaceSeconds));
 
             // Calculate instant pace (using last location update)
             if (lastLocation != null) {
@@ -470,9 +511,8 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                 // In a real app, you'd track speed from GPS
                 instantPace = averagePace;
                 double instantPaceMinPerKm = 60.0 / instantPace;
-                int instMinutes = (int) instantPaceMinPerKm;
-                int instSeconds = (int) ((instantPaceMinPerKm - instMinutes) * 60);
-                instantPaceTextView.setText(String.format("%02d:%02d/km", instMinutes, instSeconds));
+                double instantPaceSeconds = instantPaceMinPerKm * 60.0;
+                instantPaceTextView.setText(GoogleSignInUtils.formatPaceFromSeconds(instantPaceSeconds));
             }
         }
     }

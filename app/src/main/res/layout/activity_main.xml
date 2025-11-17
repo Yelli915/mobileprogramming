@@ -74,14 +74,9 @@
 
             <Button
                 android:id="@+id/start_run_button"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
+                style="@style/ButtonPrimary"
                 android:text="운동 시작"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:textColor="@color/accent_white"
-                android:background="@drawable/button_neon_orange"
-                android:textAllCaps="false" />
+                android:textStyle="bold" />
 
         </LinearLayout>
 

@@ -29,7 +29,7 @@ public class MainActivity extends AppCompatActivity {
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
 
-        firebaseAuth = FirebaseAuth.getInstance();
+        firebaseAuth = GoogleSignInUtils.getAuth();
 
         welcomeText = findViewById(R.id.welcome_text);
         settingsButton = findViewById(R.id.settings_button);
@@ -61,11 +61,9 @@ public class MainActivity extends AppCompatActivity {
         }
         FirebaseUser currentUser = firebaseAuth.getCurrentUser();
         if (currentUser != null) {
-            String displayName = currentUser.getDisplayName();
-            if (displayName == null || displayName.isEmpty()) {
-                displayName = currentUser.getEmail();
-            }
+            String displayName = GoogleSignInUtils.getUserDisplayName(currentUser);
             if (displayName != null && !displayName.isEmpty()) {
+                // 이메일 주소인 경우 @ 앞부분만 사용
                 if (displayName.contains("@")) {
                     displayName = displayName.split("@")[0];
                 }

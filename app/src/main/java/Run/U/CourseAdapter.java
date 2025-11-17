@@ -62,9 +62,9 @@ public class CourseAdapter extends RecyclerView.Adapter<CourseAdapter.CourseView
 
         void bind(Course course) {
             tvCourseName.setText(course.getName());
-            tvCourseInfo.setText((int) course.getDistance() + "km | " + course.getDifficulty());
-            tvTotalDistance.setText("총 거리: " + (int) course.getDistance() + "km,");
-            tvEstimatedTime.setText("예상 소요: " + course.getEstimatedTime() + " 분");
+            tvCourseInfo.setText(course.getDistanceFormatted() + " | " + course.getDifficultyKorean());
+            tvTotalDistance.setText("총 거리: " + course.getDistanceFormatted() + ",");
+            tvEstimatedTime.setText("예상 소요: " + course.getEstimatedTimeFormatted());
         }
     }
 }

@@ -6,9 +6,7 @@ import android.util.Log;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.TextView;
-import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
@@ -44,7 +42,7 @@ public class SketchRunActivity extends AppCompatActivity {
     }
 
     private void initFirestore() {
-        firestore = FirebaseFirestore.getInstance();
+        firestore = GoogleSignInUtils.getFirestore();
     }
 
     private void initViews() {
@@ -76,11 +74,11 @@ public class SketchRunActivity extends AppCompatActivity {
                             selectedCourse = courses.get(0);
                             updateCourseInfo(courses.get(0));
                         } else {
-                            Toast.makeText(this, "등록된 코스가 없습니다.", Toast.LENGTH_SHORT).show();
+                            GoogleSignInUtils.showToast(this, "등록된 코스가 없습니다.");
                         }
                     } else {
                         Log.w("SketchRunActivity", "코스 로드 실패", task.getException());
-                        Toast.makeText(this, "코스를 불러오는데 실패했습니다.", Toast.LENGTH_SHORT).show();
+                        GoogleSignInUtils.showToast(this, "코스를 불러오는데 실패했습니다.");
                     }
                 });
     }
@@ -140,29 +138,13 @@ public class SketchRunActivity extends AppCompatActivity {
             updateCourseInfo(course);
         });
 
-        recyclerViewCourses.setLayoutManager(new LinearLayoutManager(this));
-        recyclerViewCourses.setAdapter(courseAdapter);
+        GoogleSignInUtils.setupRecyclerView(recyclerViewCourses, courseAdapter, this);
     }
 
     private void updateCourseInfo(Course course) {
-        tvCourseTotalDistance.setText(String.format("%.1fkm", course.getDistance()));
-        tvCourseEstimatedTime.setText(course.getEstimatedTime() + "분");
-        
-        String difficultyText = course.getDifficulty();
-        if (difficultyText != null) {
-            switch (difficultyText.toLowerCase()) {
-                case "easy":
-                    difficultyText = "초급";
-                    break;
-                case "medium":
-                    difficultyText = "중급";
-                    break;
-                case "hard":
-                    difficultyText = "고급";
-                    break;
-            }
-        }
-        tvDifficulty.setText(difficultyText);
+        tvCourseTotalDistance.setText(course.getDistanceFormatted());
+        tvCourseEstimatedTime.setText(course.getEstimatedTimeFormatted());
+        tvDifficulty.setText(course.getDifficultyKorean());
     }
 
     private void setupClickListeners() {
@@ -170,7 +152,7 @@ public class SketchRunActivity extends AppCompatActivity {
 
         btnCourseDetail.setOnClickListener(v -> {
             if (selectedCourse != null) {
-                Toast.makeText(this, selectedCourse.getName() + " 상세 정보", Toast.LENGTH_SHORT).show();
+                GoogleSignInUtils.showToast(this, selectedCourse.getName() + " 상세 정보");
                 // 코스 상세 화면으로 이동하는 로직 추가
             } else {
                 showCourseNotSelectedMessage();
@@ -197,7 +179,7 @@ public class SketchRunActivity extends AppCompatActivity {
     }
 
     private void showCourseNotSelectedMessage() {
-        Toast.makeText(this, "코스를 선택해주세요", Toast.LENGTH_SHORT).show();
+        GoogleSignInUtils.showToast(this, "코스를 선택해주세요");
     }
 }
 

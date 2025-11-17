@@ -114,13 +114,7 @@ public class RunningRecord {
     }
 
     public List<LatLng> getRoutePointsLatLng() {
-        List<LatLng> latLngList = new ArrayList<>();
-        if (routePoints != null) {
-            for (GeoPoint point : routePoints) {
-                latLngList.add(new LatLng(point.getLatitude(), point.getLongitude()));
-            }
-        }
-        return latLngList;
+        return GoogleSignInUtils.toLatLngList(routePoints);
     }
 
     public void addRoutePoint(GeoPoint point) {
@@ -152,6 +146,25 @@ public class RunningRecord {
 
     public void setCreatedAt(long createdAt) {
         this.createdAt = createdAt;
+    }
+
+    // 포맷팅 메서드 (Course와 일관성 유지)
+    public String getDistanceFormatted() {
+        if (totalDistanceKm > 0) {
+            return GoogleSignInUtils.formatDistanceKm(totalDistanceKm);
+        }
+        return distance != null ? distance : "0.0km";
+    }
+
+    public String getTimeFormatted() {
+        if (elapsedTimeMs > 0) {
+            return GoogleSignInUtils.formatElapsedTimeShort(elapsedTimeMs);
+        }
+        return time != null ? time : "--:--";
+    }
+
+    public String getPaceFormatted() {
+        return averagePace != null ? averagePace : "--:--/km";
     }
 }
 

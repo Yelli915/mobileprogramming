@@ -107,10 +107,7 @@ public class Course {
     }
 
     public LatLng getStartMarkerLatLng() {
-        if (startMarker != null) {
-            return new LatLng(startMarker.getLatitude(), startMarker.getLongitude());
-        }
-        return null;
+        return GoogleSignInUtils.toLatLng(startMarker);
     }
 
     public GeoPoint getEndMarker() {
@@ -122,10 +119,7 @@ public class Course {
     }
 
     public LatLng getEndMarkerLatLng() {
-        if (endMarker != null) {
-            return new LatLng(endMarker.getLatitude(), endMarker.getLongitude());
-        }
-        return null;
+        return GoogleSignInUtils.toLatLng(endMarker);
     }
 
     public String getAdminCreatorId() {
@@ -142,6 +136,30 @@ public class Course {
 
     public void setCreatedAt(long createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getDifficultyKorean() {
+        if (difficulty == null) {
+            return "";
+        }
+        switch (difficulty.toLowerCase()) {
+            case "easy":
+                return "초급";
+            case "medium":
+                return "중급";
+            case "hard":
+                return "고급";
+            default:
+                return difficulty;
+        }
+    }
+
+    public String getDistanceFormatted() {
+        return String.format("%.1fkm", getDistance());
+    }
+
+    public String getEstimatedTimeFormatted() {
+        return getEstimatedTime() + "분";
     }
 }
 

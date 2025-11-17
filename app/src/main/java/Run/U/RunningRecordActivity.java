@@ -7,11 +7,9 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.TextView;
-import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentManager;
-import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
@@ -24,6 +22,7 @@ import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.GeoPoint;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.Query;
 import java.util.ArrayList;
@@ -64,8 +63,8 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
     }
 
     private void initFirestore() {
-        firestore = FirebaseFirestore.getInstance();
-        firebaseAuth = FirebaseAuth.getInstance();
+        firestore = GoogleSignInUtils.getFirestore();
+        firebaseAuth = GoogleSignInUtils.getAuth();
     }
 
     private void handleNewRecord() {
@@ -78,9 +77,8 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
     }
 
     private void loadRecordsFromFirestore() {
-        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        FirebaseUser currentUser = GoogleSignInUtils.requireCurrentUser(this);
         if (currentUser == null) {
-            Toast.makeText(this, "로그인이 필요합니다.", Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -89,7 +87,7 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
         firestore.collection("users")
                 .document(userId)
                 .collection("runs")
-                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .orderBy("startTime", Query.Direction.DESCENDING)
                 .get()
                 .addOnCompleteListener(task -> {
                     if (task.isSuccessful()) {
@@ -109,7 +107,7 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
                         }
                     } else {
                         Log.w("RunningRecordActivity", "기록 로드 실패", task.getException());
-                        Toast.makeText(this, "기록을 불러오는데 실패했습니다.", Toast.LENGTH_SHORT).show();
+                        GoogleSignInUtils.showToast(this, "기록을 불러오는데 실패했습니다.");
                     }
                 });
     }
@@ -119,34 +117,114 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
             RunningRecord record = new RunningRecord();
             record.setId(document.getId());
             
-            if (document.contains("date")) {
-                record.setDate(document.getString("date"));
-            }
-            if (document.contains("distance")) {
-                record.setDistance(document.getString("distance"));
-            }
-            if (document.contains("runningType")) {
+            // 새로운 필드 구조 우선 사용 (데이터베이스 구조에 맞춤)
+            
+            // type 필드 (기존 runningType과 호환)
+            if (document.contains("type")) {
+                String type = document.getString("type");
+                record.setRunningType("free".equals(type) ? "일반 운동" : ("sketch".equals(type) ? "코스 운동" : type));
+            } else if (document.contains("runningType")) {
+                // 호환성을 위해 기존 필드도 지원
                 record.setRunningType(document.getString("runningType"));
             }
-            if (document.contains("time")) {
-                record.setTime(document.getString("time"));
-            }
-            if (document.contains("averagePace")) {
-                record.setAveragePace(document.getString("averagePace"));
-            }
-            if (document.contains("totalDistanceKm")) {
+            
+            // totalDistance (미터) → totalDistanceKm (km) 변환
+            if (document.contains("totalDistance")) {
+                Double totalDistanceMeters = document.getDouble("totalDistance");
+                if (totalDistanceMeters != null) {
+                    record.setTotalDistanceKm(totalDistanceMeters / 1000.0);
+                }
+            } else if (document.contains("totalDistanceKm")) {
+                // 호환성을 위해 기존 필드도 지원
                 record.setTotalDistanceKm(document.getDouble("totalDistanceKm"));
             }
-            if (document.contains("elapsedTimeMs")) {
+            
+            // totalTime (초) → elapsedTimeMs (ms) 변환
+            if (document.contains("totalTime")) {
+                Long totalTimeSeconds = document.getLong("totalTime");
+                if (totalTimeSeconds != null) {
+                    record.setElapsedTimeMs(totalTimeSeconds * 1000);
+                }
+            } else if (document.contains("elapsedTimeMs")) {
+                // 호환성을 위해 기존 필드도 지원
                 Long elapsedTime = document.getLong("elapsedTimeMs");
                 if (elapsedTime != null) {
                     record.setElapsedTimeMs(elapsedTime);
                 }
             }
+            
+            // averagePace (숫자 초) → 문자열 변환
+            if (document.contains("averagePace")) {
+                Object paceObj = document.get("averagePace");
+                if (paceObj instanceof Number) {
+                    // 숫자 타입인 경우 문자열로 변환
+                    double paceSeconds = ((Number) paceObj).doubleValue();
+                    record.setAveragePace(GoogleSignInUtils.formatPaceFromSeconds(paceSeconds));
+                } else if (paceObj instanceof String) {
+                    // 문자열 타입인 경우 그대로 사용 (호환성)
+                    record.setAveragePace((String) paceObj);
+                }
+            }
+            
+            // startTime, endTime으로부터 time 문자열 생성
+            if (document.contains("startTime") && document.contains("endTime")) {
+                Object startTimeObj = document.get("startTime");
+                Object endTimeObj = document.get("endTime");
+                if (startTimeObj instanceof com.google.firebase.Timestamp && 
+                    endTimeObj instanceof com.google.firebase.Timestamp) {
+                    long startMs = ((com.google.firebase.Timestamp) startTimeObj).toDate().getTime();
+                    long endMs = ((com.google.firebase.Timestamp) endTimeObj).toDate().getTime();
+                    long durationMs = endMs - startMs;
+                    
+                    record.setTime(GoogleSignInUtils.formatElapsedTimeShort(durationMs));
+                }
+            } else if (document.contains("time")) {
+                // 호환성을 위해 기존 필드도 지원
+                record.setTime(document.getString("time"));
+            }
+            
+            // startTime으로부터 date 문자열 생성
+            if (document.contains("startTime")) {
+                Object startTimeObj = document.get("startTime");
+                if (startTimeObj instanceof com.google.firebase.Timestamp) {
+                    java.util.Date date = ((com.google.firebase.Timestamp) startTimeObj).toDate();
+                    java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy년 MM월 dd일", java.util.Locale.KOREA);
+                    record.setDate(sdf.format(date));
+                }
+            } else if (document.contains("date")) {
+                // 호환성을 위해 기존 필드도 지원
+                record.setDate(document.getString("date"));
+            }
+            
+            // totalDistanceKm으로부터 distance 문자열 생성
+            if (document.contains("totalDistance")) {
+                Double totalDistanceMeters = document.getDouble("totalDistance");
+                if (totalDistanceMeters != null) {
+                    double distanceKm = totalDistanceMeters / 1000.0;
+                    record.setDistance(GoogleSignInUtils.formatDistanceKm(distanceKm));
+                }
+            } else if (document.contains("distance")) {
+                // 호환성을 위해 기존 필드도 지원
+                record.setDistance(document.getString("distance"));
+            }
+            
+            // pathEncoded
             if (document.contains("pathEncoded")) {
                 record.setPathEncoded(document.getString("pathEncoded"));
             }
-            if (document.contains("routePoints")) {
+            
+            // startMarker, endMarker로부터 routePoints 생성 (호환성을 위해)
+            if (document.contains("startMarker") && document.contains("endMarker")) {
+                GeoPoint startMarker = document.getGeoPoint("startMarker");
+                GeoPoint endMarker = document.getGeoPoint("endMarker");
+                if (startMarker != null && endMarker != null) {
+                    List<GeoPoint> routePoints = new ArrayList<>();
+                    routePoints.add(startMarker);
+                    routePoints.add(endMarker);
+                    record.setRoutePoints(routePoints);
+                }
+            } else if (document.contains("routePoints")) {
+                // 호환성을 위해 기존 필드도 지원
                 @SuppressWarnings("unchecked")
                 List<com.google.firebase.firestore.GeoPoint> geoPoints = 
                     (List<com.google.firebase.firestore.GeoPoint>) document.get("routePoints");
@@ -154,16 +232,28 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
                     record.setRoutePoints(geoPoints);
                 }
             }
+            
+            // userId
             if (document.contains("userId")) {
                 record.setUserId(document.getString("userId"));
             }
+            
+            // courseId
             if (document.contains("courseId")) {
                 record.setCourseId(document.getString("courseId"));
             }
+            
+            // createdAt
             if (document.contains("createdAt")) {
                 Object createdAt = document.get("createdAt");
                 if (createdAt instanceof com.google.firebase.Timestamp) {
                     record.setCreatedAt(((com.google.firebase.Timestamp) createdAt).toDate().getTime());
+                }
+            } else if (document.contains("startTime")) {
+                // createdAt이 없으면 startTime 사용
+                Object startTimeObj = document.get("startTime");
+                if (startTimeObj instanceof com.google.firebase.Timestamp) {
+                    record.setCreatedAt(((com.google.firebase.Timestamp) startTimeObj).toDate().getTime());
                 }
             }
             
@@ -192,8 +282,7 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
             // 선택된 기록의 지도 업데이트
             updateMapForRecord(record);
         });
-        recordRecyclerView.setLayoutManager(new LinearLayoutManager(this));
-        recordRecyclerView.setAdapter(recordAdapter);
+        GoogleSignInUtils.setupRecyclerView(recordRecyclerView, recordAdapter, this);
     }
 
     private void setupMap() {
@@ -323,15 +412,9 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
             totalTimeMs += record.getElapsedTimeMs();
         }
 
-        long totalHours = totalTimeMs / (1000 * 60 * 60);
-        long totalMinutes = (totalTimeMs % (1000 * 60 * 60)) / (1000 * 60);
-
-        totalDistanceText.setText(String.format("%.1fkm", totalDistance));
-        if (totalHours > 0) {
-            totalTimeText.setText(String.format("%d시간 %d분", totalHours, totalMinutes));
-        } else {
-            totalTimeText.setText(String.format("%d분", totalMinutes));
-        }
+        totalDistanceText.setText(GoogleSignInUtils.formatDistanceKm(totalDistance));
+        totalTimeText.setText(GoogleSignInUtils.formatElapsedTimeWithLabel(totalTimeMs));
     }
 }
+
 
