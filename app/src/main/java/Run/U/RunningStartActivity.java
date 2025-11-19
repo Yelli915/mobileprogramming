@@ -34,18 +34,23 @@ import com.google.firebase.firestore.GeoPoint;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.Timestamp;
 import android.util.Log;
-import java.text.SimpleDateFormat;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationResult;
+import com.google.android.gms.location.LocationAvailability;
+import com.google.android.gms.location.Priority;
+import com.google.android.gms.location.Granularity;
 
 public class RunningStartActivity extends AppCompatActivity implements OnMapReadyCallback {
 
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
-    private static final long LOCATION_UPDATE_INTERVAL = 2000L; // 2 seconds
+    private static final long LOCATION_UPDATE_INTERVAL = 2000L;
 
     private GoogleMap map;
     private FusedLocationProviderClient fusedLocationClient;
@@ -55,9 +60,10 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
     private TextView distanceTextView;
     private TextView averagePaceTextView;
     private TextView instantPaceTextView;
+    private Button startRunningButton;  // 수정: 이름 변경
     private Button pauseButton;
+    private Button resumeButton;  // 추가: 재개 버튼
     private Button endRunButton;
-    private Button startTimerButton;
 
     // Running state
     private boolean isRunning = false;
@@ -65,27 +71,58 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
     private long startTime = 0;
     private long pausedTime = 0;
     private long totalPausedTime = 0;
-    private Handler handler = new Handler(Looper.getMainLooper());
-    private Runnable timerRunnable = null;
 
-    // Distance tracking
+    private final TimerHandler timerHandler = new TimerHandler(this);
+
+    private static class TimerHandler extends Handler {
+        private final WeakReference<RunningStartActivity> activityRef;
+
+        TimerHandler(RunningStartActivity activity) {
+            super(Looper.getMainLooper());
+            this.activityRef = new WeakReference<>(activity);
+        }
+
+        RunningStartActivity getActivity() {
+            return activityRef.get();
+        }
+    }
+
+    private LocationRequest locationRequest;
+    private LocationCallback locationCallback;
+
     private double totalDistance = 0.0;
     private Location lastLocation = null;
-    private Handler locationUpdateHandler = new Handler(Looper.getMainLooper());
-    private Runnable locationUpdateRunnable = null;
 
-    // Route tracking
     private List<LatLng> routePoints = new ArrayList<>();
     private PolylineOptions routePolyline;
 
-    // Pace calculation
     private double averagePace = 0.0;
     private double instantPace = 0.0;
 
-    // Firestore
     private FirebaseFirestore firestore;
     private FirebaseAuth firebaseAuth;
-    private String courseId; // 코스 기반 러닝인 경우
+    private String courseId;
+
+    private static class TimerRunnable implements Runnable {
+        private final WeakReference<RunningStartActivity> activityRef;
+
+        TimerRunnable(RunningStartActivity activity) {
+            this.activityRef = new WeakReference<>(activity);
+        }
+
+        @Override
+        public void run() {
+            RunningStartActivity activity = activityRef.get();
+            if (activity != null && activity.isRunning && !activity.isPaused) {
+                long elapsedTime = System.currentTimeMillis() - activity.startTime - activity.totalPausedTime;
+                activity.updateTimerDisplay(elapsedTime);
+                activity.updatePace(elapsedTime);
+                activity.timerHandler.postDelayed(this, 1000);
+            }
+        }
+    }
+
+    private TimerRunnable timerRunnable;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -97,26 +134,24 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         distanceTextView = findViewById(R.id.distanceTextView);
         averagePaceTextView = findViewById(R.id.averagePaceTextView);
         instantPaceTextView = findViewById(R.id.instantPaceTextView);
+        startRunningButton = findViewById(R.id.startRunningButton);  // 수정
         pauseButton = findViewById(R.id.pauseButton);
+        resumeButton = findViewById(R.id.resumeButton);  // 추가
         endRunButton = findViewById(R.id.endRunButton);
-        startTimerButton = findViewById(R.id.startTimerButton);
 
-        // Check if views are properly initialized
-        if (timerTextView == null || distanceTextView == null || averagePaceTextView == null 
-                || instantPaceTextView == null || pauseButton == null || endRunButton == null 
-                || startTimerButton == null) {
+        if (timerTextView == null || distanceTextView == null || averagePaceTextView == null
+                || instantPaceTextView == null || pauseButton == null || endRunButton == null
+                || startRunningButton == null || resumeButton == null) {
             Log.e("RunningStartActivity", "필수 뷰를 찾을 수 없습니다.");
             GoogleSignInUtils.showToast(this, "화면 초기화 오류가 발생했습니다.");
             finish();
             return;
         }
 
-        // Set up back button
         View backButton = findViewById(R.id.backButton);
         if (backButton != null) {
             backButton.setOnClickListener(v -> {
                 if (isRunning) {
-                    // 운동 중이면 종료 확인 다이얼로그 표시
                     showExitConfirmationDialog();
                 } else {
                     finish();
@@ -124,17 +159,48 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
             });
         }
 
-        // Intent에서 코스 정보 받기
         handleCourseIntent();
 
-        // Initialize Firestore
         firestore = GoogleSignInUtils.getFirestore();
         firebaseAuth = GoogleSignInUtils.getAuth();
 
-        // Initialize FusedLocationProviderClient
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
-        // Initialize map
+        locationRequest = new LocationRequest.Builder(
+                Priority.PRIORITY_HIGH_ACCURACY,
+                2000L
+        )
+                .setMinUpdateIntervalMillis(1000L)
+                .setGranularity(Granularity.GRANULARITY_PERMISSION_LEVEL)
+                .setWaitForAccurateLocation(true)
+                .build();
+
+        locationCallback = new LocationCallback() {
+            @Override
+            public void onLocationResult(@NonNull LocationResult locationResult) {
+                if (locationResult == null) {
+                    return;
+                }
+
+                Location location = locationResult.getLastLocation();
+                if (location != null && isRunning && !isPaused) {
+                    updateDistance(location);
+                    lastLocation = location;
+                }
+            }
+
+            @Override
+            public void onLocationAvailability(@NonNull LocationAvailability availability) {
+                if (!availability.isLocationAvailable()) {
+                    Log.w("RunningStartActivity", "GPS 신호가 약합니다.");
+                    GoogleSignInUtils.showToast(
+                            RunningStartActivity.this,
+                            "GPS 신호가 약합니다. 야외로 이동해주세요."
+                    );
+                }
+            }
+        };
+
         FragmentManager fragmentManager = getSupportFragmentManager();
         SupportMapFragment mapFragment = (SupportMapFragment) fragmentManager.findFragmentById(R.id.mapFragment);
         if (mapFragment != null) {
@@ -143,34 +209,51 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
             Log.w("RunningStartActivity", "MapFragment를 찾을 수 없습니다.");
         }
 
-        // Button click listeners
-        pauseButton.setOnClickListener(v -> togglePause());
-
+        // 버튼 클릭 리스너 수정
+        startRunningButton.setOnClickListener(v -> startRunning());
+        pauseButton.setOnClickListener(v -> pauseRunning());
+        resumeButton.setOnClickListener(v -> resumeRunning());
         endRunButton.setOnClickListener(v -> endRun());
 
-        startTimerButton.setOnClickListener(v -> startRunning());
-
-        // Request location permissions
         if (checkLocationPermission()) {
-            requestLocationUpdates();
+            startLocationUpdates();
         } else {
             requestLocationPermission();
         }
+    }
+
+    // UI 상태 업데이트 메서드 추가
+    private void updateButtonsForRunningState() {
+        startRunningButton.setVisibility(View.GONE);
+        pauseButton.setVisibility(View.VISIBLE);
+        resumeButton.setVisibility(View.GONE);
+        endRunButton.setVisibility(View.VISIBLE);
+    }
+
+    private void updateButtonsForPausedState() {
+        startRunningButton.setVisibility(View.GONE);
+        pauseButton.setVisibility(View.GONE);
+        resumeButton.setVisibility(View.VISIBLE);
+        endRunButton.setVisibility(View.VISIBLE);
+    }
+
+    private void updateButtonsForInitialState() {
+        startRunningButton.setVisibility(View.VISIBLE);
+        pauseButton.setVisibility(View.GONE);
+        resumeButton.setVisibility(View.GONE);
+        endRunButton.setVisibility(View.GONE);
     }
 
     @Override
     @SuppressLint("MissingPermission")
     public void onMapReady(GoogleMap googleMap) {
         map = googleMap;
-
-        // Enable my location button if permission granted
         if (checkLocationPermission()) {
             try {
                 map.setMyLocationEnabled(true);
                 map.getUiSettings().setMyLocationButtonEnabled(true);
                 getCurrentLocation();
             } catch (SecurityException e) {
-                // Permission was revoked between check and use
                 e.printStackTrace();
             }
         }
@@ -202,12 +285,14 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                         map.setMyLocationEnabled(true);
                         map.getUiSettings().setMyLocationButtonEnabled(true);
                     } catch (SecurityException e) {
-                        // Permission was revoked between check and use
                         e.printStackTrace();
                     }
                 }
                 getCurrentLocation();
-                requestLocationUpdates();
+                startLocationUpdates();
+            } else {
+                GoogleSignInUtils.showToast(this, "위치 권한이 필요합니다.");
+                finish();
             }
         }
     }
@@ -223,66 +308,64 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                 public void onSuccess(Location location) {
                     if (location != null && map != null) {
                         LatLng currentLatLng = new LatLng(location.getLatitude(), location.getLongitude());
-                        map.addMarker(new MarkerOptions().position(currentLatLng).title("현재 위치"));
                         map.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, 15f));
                         lastLocation = location;
                     }
                 }
             });
         } catch (SecurityException e) {
-            // Permission was revoked between check and use
             e.printStackTrace();
         }
     }
 
-    private void requestLocationUpdates() {
+    @SuppressLint("MissingPermission")
+    private void startLocationUpdates() {
         if (!checkLocationPermission()) {
+            Log.w("RunningStartActivity", "위치 권한이 없습니다.");
             return;
         }
 
-        locationUpdateRunnable = new Runnable() {
-            @Override
-            @SuppressLint("MissingPermission")
-            public void run() {
-                if (isRunning && !isPaused && checkLocationPermission()) {
-                    try {
-                        fusedLocationClient.getLastLocation().addOnSuccessListener(new OnSuccessListener<Location>() {
-                            @Override
-                            public void onSuccess(Location location) {
-                                if (location != null) {
-                                    updateDistance(location);
-                                    lastLocation = location;
-                                }
-                            }
-                        });
-                    } catch (SecurityException e) {
-                        // Permission was revoked between check and use
-                        e.printStackTrace();
-                    }
-                }
-                locationUpdateHandler.postDelayed(this, LOCATION_UPDATE_INTERVAL);
-            }
-        };
-        locationUpdateHandler.post(locationUpdateRunnable);
+        try {
+            fusedLocationClient.requestLocationUpdates(
+                    locationRequest,
+                    locationCallback,
+                    Looper.getMainLooper()
+            );
+            Log.d("RunningStartActivity", "위치 업데이트 시작됨");
+        } catch (SecurityException e) {
+            Log.e("RunningStartActivity", "위치 업데이트 요청 실패", e);
+            e.printStackTrace();
+        }
     }
 
     private void updateDistance(Location newLocation) {
+        if (newLocation.getAccuracy() > 50) {
+            Log.w("RunningStartActivity", "위치 정확도가 낮습니다: " + newLocation.getAccuracy() + "m");
+            return;
+        }
+
         LatLng currentLatLng = new LatLng(newLocation.getLatitude(), newLocation.getLongitude());
-        
+
         if (lastLocation != null) {
-            double distance = lastLocation.distanceTo(newLocation) / 1000.0; // Convert to km
-            totalDistance += distance;
+            float distance = lastLocation.distanceTo(newLocation);
+
+            if (distance < 5) {
+                return;
+            }
+
+            totalDistance += distance / 1000.0;
             distanceTextView.setText(GoogleSignInUtils.formatDistanceKm(totalDistance));
         }
 
-        // 경로 좌표 추가
-        routePoints.add(currentLatLng);
+        if (routePoints.isEmpty() ||
+                lastLocation == null ||
+                lastLocation.distanceTo(newLocation) >= 10) {
+            routePoints.add(currentLatLng);
+        }
 
-        // 지도 업데이트: 경로 Polyline 그리기
         if (map != null) {
             map.clear();
-            
-            // 경로 Polyline 그리기
+
             if (routePoints.size() > 1) {
                 routePolyline = new PolylineOptions()
                         .addAll(routePoints)
@@ -290,19 +373,17 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                         .color(android.graphics.Color.parseColor("#FF6B35"));
                 map.addPolyline(routePolyline);
             }
-            
-            // 시작 지점 마커
+
             if (!routePoints.isEmpty()) {
                 map.addMarker(new MarkerOptions()
                         .position(routePoints.get(0))
                         .title("시작"));
             }
-            
-            // 현재 위치 마커
+
             map.addMarker(new MarkerOptions()
                     .position(currentLatLng)
                     .title("현재 위치"));
-            
+
             map.moveCamera(CameraUpdateFactory.newLatLng(currentLatLng));
         }
     }
@@ -316,9 +397,8 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                 totalPausedTime = 0;
                 totalDistance = 0.0;
                 lastLocation = null;
-                routePoints.clear(); // 경로 초기화
+                routePoints.clear();
 
-                // Reset displays
                 if (distanceTextView != null) {
                     distanceTextView.setText("0.00 km");
                 }
@@ -329,19 +409,13 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                     instantPaceTextView.setText("--:--/km");
                 }
 
-                // Start timer
                 startTimer();
-
-                // Start location updates
                 getCurrentLocation();
+                startLocationUpdates();
 
-                // Update button states
-                if (startTimerButton != null) {
-                    startTimerButton.setEnabled(false);
-                }
-                if (pauseButton != null) {
-                    pauseButton.setEnabled(true);
-                }
+                // UI 업데이트: 러닝 중 상태
+                updateButtonsForRunningState();
+
             } catch (Exception e) {
                 Log.e("RunningStartActivity", "운동 시작 중 오류 발생", e);
                 GoogleSignInUtils.showToast(this, "운동 시작 중 오류가 발생했습니다.");
@@ -350,21 +424,27 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         }
     }
 
-    private void togglePause() {
-        if (isRunning) {
-            if (isPaused) {
-                // Resume
-                isPaused = false;
-                totalPausedTime += (System.currentTimeMillis() - pausedTime);
-                pauseButton.setText("일시 정지");
-                startTimer();
-            } else {
-                // Pause
-                isPaused = true;
-                pausedTime = System.currentTimeMillis();
-                pauseButton.setText("재개");
-                stopTimer();
-            }
+    // 일시정지 메서드 추가
+    private void pauseRunning() {
+        if (isRunning && !isPaused) {
+            isPaused = true;
+            pausedTime = System.currentTimeMillis();
+            stopTimer();
+
+            // UI 업데이트: 일시정지 상태
+            updateButtonsForPausedState();
+        }
+    }
+
+    // 재개 메서드 추가
+    private void resumeRunning() {
+        if (isRunning && isPaused) {
+            isPaused = false;
+            totalPausedTime += (System.currentTimeMillis() - pausedTime);
+            startTimer();
+
+            // UI 업데이트: 러닝 중 상태
+            updateButtonsForRunningState();
         }
     }
 
@@ -373,21 +453,33 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
             return;
         }
 
+        if (totalDistance < 0.1) {
+            new AlertDialog.Builder(this)
+                    .setTitle("기록 저장 불가")
+                    .setMessage("최소 100m 이상 이동해야 기록이 저장됩니다.")
+                    .setPositiveButton("확인", (dialog, which) -> {
+                        isRunning = false;
+                        isPaused = false;
+                        stopTimer();
+                        stopLocationUpdates();
+                        updateButtonsForInitialState();
+                    })
+                    .show();
+            return;
+        }
+
         isRunning = false;
         isPaused = false;
         stopTimer();
         stopLocationUpdates();
 
-        // 운동 기록 데이터 준비
         long elapsedTime = System.currentTimeMillis() - startTime - totalPausedTime;
         String distance = distanceTextView.getText().toString();
         String time = timerTextView.getText().toString();
         String pace = averagePaceTextView.getText().toString();
 
-        // Firestore에 저장
         saveRunToFirestore(elapsedTime, distance, time, pace);
 
-        // RunningRecordActivity로 이동
         Intent intent = new Intent(RunningStartActivity.this, RunningRecordActivity.class);
         intent.putExtra("distance", distance);
         intent.putExtra("time", time);
@@ -406,15 +498,11 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         }
 
         String userId = currentUser.getUid();
-
-        // Encoded Polyline 생성
         String pathEncoded = PolylineUtils.encode(routePoints);
 
-        // 시작/종료 시간 계산
         Date startTimeDate = new Date(startTime);
         Date endTimeDate = new Date(System.currentTimeMillis());
 
-        // 시작/종료 마커 추출
         GeoPoint startMarker = null;
         GeoPoint endMarker = null;
         if (!routePoints.isEmpty()) {
@@ -424,23 +512,17 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
             endMarker = new GeoPoint(endPoint.latitude, endPoint.longitude);
         }
 
-        // totalDistance: km → 미터 단위 변환
         double totalDistanceMeters = totalDistance * 1000.0;
-
-        // totalTime: 밀리초 → 초 단위 변환
         long totalTimeSeconds = elapsedTimeMs / 1000;
-
-        // averagePace: 문자열 "MM:SS/km" → 초 단위 숫자로 변환
         double averagePaceSeconds = GoogleSignInUtils.parsePaceToSeconds(pace);
 
-        // Firestore 문서 데이터 (데이터베이스 구조에 맞게 수정)
         Map<String, Object> runData = new HashMap<>();
         runData.put("type", courseId != null ? "sketch" : "free");
         runData.put("startTime", new Timestamp(startTimeDate));
         runData.put("endTime", new Timestamp(endTimeDate));
-        runData.put("totalDistance", totalDistanceMeters); // 미터 단위
-        runData.put("totalTime", totalTimeSeconds); // 초 단위
-        runData.put("averagePace", averagePaceSeconds); // km당 초 (숫자)
+        runData.put("totalDistance", totalDistanceMeters);
+        runData.put("totalTime", totalTimeSeconds);
+        runData.put("averagePace", averagePaceSeconds);
         runData.put("pathEncoded", pathEncoded);
         if (startMarker != null) {
             runData.put("startMarker", startMarker);
@@ -451,11 +533,8 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         if (courseId != null) {
             runData.put("courseId", courseId);
         }
-        
-        // 호환성을 위해 추가 필드 (선택사항)
         runData.put("createdAt", FieldValue.serverTimestamp());
 
-        // users/{uid}/runs 컬렉션에 저장
         firestore.collection("users")
                 .document(userId)
                 .collection("runs")
@@ -469,46 +548,35 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                 });
     }
 
-
     private void startTimer() {
-        timerRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (isRunning && !isPaused) {
-                    long elapsedTime = System.currentTimeMillis() - startTime - totalPausedTime;
-                    updateTimerDisplay(elapsedTime);
-                    updatePace(elapsedTime);
-                }
-                handler.postDelayed(this, 1000);
-            }
-        };
-        handler.post(timerRunnable);
+        if (timerRunnable == null) {
+            timerRunnable = new TimerRunnable(this);
+        }
+        timerHandler.post(timerRunnable);
     }
 
     private void stopTimer() {
         if (timerRunnable != null) {
-            handler.removeCallbacks(timerRunnable);
+            timerHandler.removeCallbacks(timerRunnable);
         }
     }
 
     private void updateTimerDisplay(long elapsedTime) {
-        timerTextView.setText(GoogleSignInUtils.formatElapsedTime(elapsedTime));
+        if (timerTextView != null) {
+            timerTextView.setText(GoogleSignInUtils.formatElapsedTime(elapsedTime));
+        }
     }
 
     private void updatePace(long elapsedTime) {
         if (totalDistance > 0) {
             double elapsedHours = elapsedTime / 3600000.0;
-            averagePace = totalDistance / elapsedHours; // km/h
+            averagePace = totalDistance / elapsedHours;
 
-            // Convert to min/km format
             double averagePaceMinPerKm = 60.0 / averagePace;
             double averagePaceSeconds = averagePaceMinPerKm * 60.0;
             averagePaceTextView.setText(GoogleSignInUtils.formatPaceFromSeconds(averagePaceSeconds));
 
-            // Calculate instant pace (using last location update)
             if (lastLocation != null) {
-                // This is a simplified instant pace calculation
-                // In a real app, you'd track speed from GPS
                 instantPace = averagePace;
                 double instantPaceMinPerKm = 60.0 / instantPace;
                 double instantPaceSeconds = instantPaceMinPerKm * 60.0;
@@ -518,8 +586,14 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
     }
 
     private void stopLocationUpdates() {
-        if (locationUpdateRunnable != null) {
-            locationUpdateHandler.removeCallbacks(locationUpdateRunnable);
+        if (fusedLocationClient != null && locationCallback != null) {
+            fusedLocationClient.removeLocationUpdates(locationCallback)
+                    .addOnSuccessListener(aVoid -> {
+                        Log.d("RunningStartActivity", "위치 업데이트 중지됨");
+                    })
+                    .addOnFailureListener(e -> {
+                        Log.e("RunningStartActivity", "위치 업데이트 중지 실패", e);
+                    });
         }
     }
 
@@ -528,7 +602,6 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         if (intent != null && intent.hasExtra("course_id")) {
             courseId = intent.getStringExtra("course_id");
         } else if (intent != null && intent.hasExtra("course_name")) {
-            // 기존 호환성을 위해 course_name도 처리
             String courseName = intent.getStringExtra("course_name");
             double courseDistance = intent.getDoubleExtra("course_distance", 0.0);
             String courseDifficulty = intent.getStringExtra("course_difficulty");
@@ -539,7 +612,11 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         new AlertDialog.Builder(this)
                 .setTitle("운동 종료")
                 .setMessage("운동을 종료하시겠습니까? 기록이 저장되지 않습니다.")
-                .setPositiveButton("종료", (dialog, which) -> finish())
+                .setPositiveButton("종료", (dialog, which) -> {
+                    stopTimer();
+                    stopLocationUpdates();
+                    finish();
+                })
                 .setNegativeButton("취소", (dialog, which) -> dialog.dismiss())
                 .show();
     }
@@ -549,6 +626,9 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         super.onDestroy();
         stopTimer();
         stopLocationUpdates();
+
+        if (timerHandler != null) {
+            timerHandler.removeCallbacksAndMessages(null);
+        }
     }
 }
-
