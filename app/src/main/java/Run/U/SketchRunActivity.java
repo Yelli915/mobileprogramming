@@ -56,7 +56,6 @@ public class SketchRunActivity extends AppCompatActivity {
 
         // Material3 버튼들 초기화
         btnCourseDetail = findViewById(R.id.btnCourseDetail);
-        btnFindLocation = findViewById(R.id.btnFindLocation);
         btnStartRun = findViewById(R.id.btnStartRun);
 
         // 코스 정보 TextView 초기화
@@ -189,13 +188,6 @@ public class SketchRunActivity extends AppCompatActivity {
             } else {
                 showCourseNotSelectedMessage();
             }
-        });
-
-        // 내 위치 찾기 버튼 (지도에서 현재 위치로 이동)
-        btnFindLocation.setOnClickListener(v -> {
-            GoogleSignInUtils.showToast(this, "내 위치로 이동합니다");
-            // TODO: 지도에서 현재 위치로 이동하는 로직 구현
-            // mapView.moveToCurrentLocation();
         });
 
         // 스케치 런 시작 버튼
