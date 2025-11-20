@@ -8,6 +8,9 @@ import android.location.Location;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
@@ -19,6 +22,12 @@ import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentManager;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationResult;
+import com.google.android.gms.location.LocationAvailability;
+import com.google.android.gms.location.Priority;
+import com.google.android.gms.location.Granularity;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -32,25 +41,26 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.GeoPoint;
 import com.google.firebase.firestore.FieldValue;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.Timestamp;
-import android.util.Log;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import com.google.android.gms.location.LocationRequest;
-import com.google.android.gms.location.LocationCallback;
-import com.google.android.gms.location.LocationResult;
-import com.google.android.gms.location.LocationAvailability;
-import com.google.android.gms.location.Priority;
-import com.google.android.gms.location.Granularity;
+import java.util.Set;
 
 public class RunningStartActivity extends AppCompatActivity implements OnMapReadyCallback {
 
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
     private static final long LOCATION_UPDATE_INTERVAL = 2000L;
+    private static final float GUIDE_POINT_THRESHOLD = 20.0f;  // 도착 감지: 20m
+    private static final int PRE_ANNOUNCE_SECONDS = 10;  // 10초 전 사전 안내
 
     private GoogleMap map;
     private FusedLocationProviderClient fusedLocationClient;
@@ -60,9 +70,9 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
     private TextView distanceTextView;
     private TextView averagePaceTextView;
     private TextView instantPaceTextView;
-    private Button startRunningButton;  // 수정: 이름 변경
+    private Button startRunningButton;
     private Button pauseButton;
-    private Button resumeButton;  // 추가: 재개 버튼
+    private Button resumeButton;
     private Button endRunButton;
 
     // Running state
@@ -98,10 +108,20 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
 
     private double averagePace = 0.0;
     private double instantPace = 0.0;
+    private double currentPaceKmh = 0.0;  // 현재 페이스 (km/h)
 
     private FirebaseFirestore firestore;
     private FirebaseAuth firebaseAuth;
     private String courseId;
+
+    // TTS 관련 변수
+    private TextToSpeech textToSpeech;
+    private boolean isTTSInitialized = false;
+
+    // 가이드 포인트 관련 변수
+    private List<GuidePoint> guidePoints = new ArrayList<>();
+    private Set<String> announcedGuidePoints = new HashSet<>();
+    private Set<String> preAnnouncedGuidePoints = new HashSet<>();  // 사전 안내 추적
 
     private static class TimerRunnable implements Runnable {
         private final WeakReference<RunningStartActivity> activityRef;
@@ -134,9 +154,9 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         distanceTextView = findViewById(R.id.distanceTextView);
         averagePaceTextView = findViewById(R.id.averagePaceTextView);
         instantPaceTextView = findViewById(R.id.instantPaceTextView);
-        startRunningButton = findViewById(R.id.startRunningButton);  // 수정
+        startRunningButton = findViewById(R.id.startRunningButton);
         pauseButton = findViewById(R.id.pauseButton);
-        resumeButton = findViewById(R.id.resumeButton);  // 추가
+        resumeButton = findViewById(R.id.resumeButton);
         endRunButton = findViewById(R.id.endRunButton);
 
         if (timerTextView == null || distanceTextView == null || averagePaceTextView == null
@@ -164,6 +184,14 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         firestore = GoogleSignInUtils.getFirestore();
         firebaseAuth = GoogleSignInUtils.getAuth();
 
+        // TTS 초기화
+        initializeTextToSpeech();
+
+        // 스케치 런인 경우 가이드 포인트 로드
+        if (courseId != null) {
+            loadGuidePoints();
+        }
+
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
         locationRequest = new LocationRequest.Builder(
@@ -185,6 +213,12 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                 Location location = locationResult.getLastLocation();
                 if (location != null && isRunning && !isPaused) {
                     updateDistance(location);
+
+                    // 스케치 런인 경우 가이드 포인트 체크
+                    if (courseId != null) {
+                        checkGuidePoints(location);
+                    }
+
                     lastLocation = location;
                 }
             }
@@ -209,7 +243,7 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
             Log.w("RunningStartActivity", "MapFragment를 찾을 수 없습니다.");
         }
 
-        // 버튼 클릭 리스너 수정
+        // 버튼 클릭 리스너
         startRunningButton.setOnClickListener(v -> startRunning());
         pauseButton.setOnClickListener(v -> pauseRunning());
         resumeButton.setOnClickListener(v -> resumeRunning());
@@ -222,7 +256,250 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         }
     }
 
-    // UI 상태 업데이트 메서드 추가
+    // TTS 초기화
+    private void initializeTextToSpeech() {
+        textToSpeech = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
+            @Override
+            public void onInit(int status) {
+                if (status == TextToSpeech.SUCCESS) {
+                    int result = textToSpeech.setLanguage(Locale.KOREAN);
+
+                    if (result == TextToSpeech.LANG_MISSING_DATA ||
+                            result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                        Log.e("TTS", "한국어가 지원되지 않습니다.");
+                        GoogleSignInUtils.showToast(
+                                RunningStartActivity.this,
+                                "음성 안내를 사용할 수 없습니다."
+                        );
+                        isTTSInitialized = false;
+                    } else {
+                        textToSpeech.setPitch(1.0f);
+                        textToSpeech.setSpeechRate(1.0f);
+
+                        isTTSInitialized = true;
+                        Log.d("TTS", "TTS 초기화 성공");
+
+                        speak("음성 안내가 준비되었습니다.");
+                    }
+                } else {
+                    Log.e("TTS", "TTS 초기화 실패");
+                    isTTSInitialized = false;
+                }
+            }
+        });
+
+        textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+            @Override
+            public void onStart(String utteranceId) {
+                Log.d("TTS", "음성 시작: " + utteranceId);
+            }
+
+            @Override
+            public void onDone(String utteranceId) {
+                Log.d("TTS", "음성 완료: " + utteranceId);
+            }
+
+            @Override
+            public void onError(String utteranceId) {
+                Log.e("TTS", "음성 오류: " + utteranceId);
+            }
+        });
+    }
+
+    // 가이드 포인트 로드
+    private void loadGuidePoints() {
+        if (courseId == null) {
+            return;
+        }
+
+        firestore.collection("courses")
+                .document(courseId)
+                .collection("guidePoints")
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+                    guidePoints.clear();
+
+                    for (QueryDocumentSnapshot document : queryDocumentSnapshots) {
+                        GuidePoint guidePoint = new GuidePoint();
+                        guidePoint.setId(document.getId());
+
+                        if (document.contains("location")) {
+                            guidePoint.setLocation(document.getGeoPoint("location"));
+                        }
+                        if (document.contains("message")) {
+                            guidePoint.setMessage(document.getString("message"));
+                        }
+                        if (document.contains("order")) {
+                            Long order = document.getLong("order");
+                            if (order != null) {
+                                guidePoint.setOrder(order.intValue());
+                            }
+                        }
+
+                        guidePoints.add(guidePoint);
+                    }
+
+                    // order 순으로 정렬
+                    Collections.sort(guidePoints, new Comparator<GuidePoint>() {
+                        @Override
+                        public int compare(GuidePoint gp1, GuidePoint gp2) {
+                            return Integer.compare(gp1.getOrder(), gp2.getOrder());
+                        }
+                    });
+
+                    Log.d("GuidePoints", guidePoints.size() + "개의 가이드 포인트 로드됨");
+
+                    if (!guidePoints.isEmpty()) {
+                        GoogleSignInUtils.showToast(
+                                this,
+                                guidePoints.size() + "개의 안내 지점이 설정되었습니다"
+                        );
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Log.e("GuidePoints", "가이드 포인트 로드 실패", e);
+                });
+    }
+
+    // TTS 음성 출력
+    private void speak(String text) {
+        if (!isTTSInitialized || textToSpeech == null) {
+            Log.w("TTS", "TTS가 초기화되지 않았습니다.");
+            return;
+        }
+
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            String utteranceId = String.valueOf(System.currentTimeMillis());
+            textToSpeech.speak(text, TextToSpeech.QUEUE_ADD, null, utteranceId);
+        } else {
+            HashMap<String, String> params = new HashMap<>();
+            params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID,
+                    String.valueOf(System.currentTimeMillis()));
+            textToSpeech.speak(text, TextToSpeech.QUEUE_ADD, params);
+        }
+
+        Log.d("TTS", "음성 출력: " + text);
+    }
+
+    // 페이스 기반 거리 계산
+    private float calculateDistanceForSeconds(int seconds) {
+        if (currentPaceKmh <= 0) {
+            // 페이스가 없으면 평균 러닝 속도 가정 (9km/h)
+            currentPaceKmh = 9.0;
+        }
+
+        // km/h를 m/s로 변환
+        double metersPerSecond = (currentPaceKmh * 1000.0) / 3600.0;
+
+        // 주어진 시간(초) 동안 이동할 거리(미터)
+        float distance = (float) (metersPerSecond * seconds);
+
+        Log.d("PaceCalculation",
+                "현재 페이스: " + currentPaceKmh + " km/h, " +
+                        seconds + "초 후 거리: " + distance + "m");
+
+        return distance;
+    }
+
+    // 가이드 포인트 체크 (사전 안내 포함)
+    private void checkGuidePoints(Location currentLocation) {
+        if (guidePoints.isEmpty()) {
+            return;
+        }
+
+        // 10초 후 도달할 거리 계산
+        float preAnnounceDistance = calculateDistanceForSeconds(PRE_ANNOUNCE_SECONDS);
+
+        for (GuidePoint guidePoint : guidePoints) {
+            GeoPoint geoPoint = guidePoint.getLocation();
+            if (geoPoint == null) {
+                continue;
+            }
+
+            // 현재 위치에서 가이드 포인트까지 거리 계산
+            float[] results = new float[1];
+            Location.distanceBetween(
+                    currentLocation.getLatitude(),
+                    currentLocation.getLongitude(),
+                    geoPoint.getLatitude(),
+                    geoPoint.getLongitude(),
+                    results
+            );
+
+            float distance = results[0];
+            String pointId = guidePoint.getId();
+
+            Log.d("GuidePoint",
+                    "가이드 포인트 " + guidePoint.getOrder() +
+                            "까지 거리: " + distance + "m (사전안내 임계값: " + preAnnounceDistance + "m)");
+
+            // 10초 전 사전 안내
+            if (distance <= preAnnounceDistance &&
+                    distance > GUIDE_POINT_THRESHOLD &&
+                    !preAnnouncedGuidePoints.contains(pointId) &&
+                    !announcedGuidePoints.contains(pointId)) {
+
+                preAnnounceGuidePoint(guidePoint, distance);
+                preAnnouncedGuidePoints.add(pointId);
+            }
+
+            // 도착 안내 (20m 이내)
+            if (distance <= GUIDE_POINT_THRESHOLD &&
+                    !announcedGuidePoints.contains(pointId)) {
+
+                announceGuidePoint(guidePoint);
+                announcedGuidePoints.add(pointId);
+
+                // 지도에 마커 표시
+                if (map != null) {
+                    LatLng guideLatLng = new LatLng(
+                            geoPoint.getLatitude(),
+                            geoPoint.getLongitude()
+                    );
+                    map.addMarker(new MarkerOptions()
+                            .position(guideLatLng)
+                            .title("안내 지점 " + guidePoint.getOrder())
+                            .snippet(guidePoint.getMessage()));
+                }
+            }
+        }
+    }
+
+    // 사전 안내
+    private void preAnnounceGuidePoint(GuidePoint guidePoint, float distance) {
+        String message = guidePoint.getMessage();
+
+        // 거리를 초로 변환
+        int secondsToArrival = (int) (distance / (currentPaceKmh * 1000.0 / 3600.0));
+
+        // 사전 안내 메시지 생성
+        String preAnnounceMessage = "약 " + secondsToArrival + "초 후, " + message;
+
+        Log.d("PreAnnounce", "사전 안내: " + preAnnounceMessage);
+
+        // TTS 음성 출력
+        speak(preAnnounceMessage);
+    }
+
+    // 가이드 포인트 안내
+    private void announceGuidePoint(GuidePoint guidePoint) {
+        String message = guidePoint.getMessage();
+
+        if (message == null || message.isEmpty()) {
+            message = "안내 지점에 도착했습니다";
+        }
+
+        Log.d("GuidePoint", "안내: " + message);
+
+        GoogleSignInUtils.showToast(this, message);
+        speak(message);
+    }
+
+    // UI 상태 업데이트 메서드
     private void updateButtonsForRunningState() {
         startRunningButton.setVisibility(View.GONE);
         pauseButton.setVisibility(View.VISIBLE);
@@ -398,6 +675,9 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                 totalDistance = 0.0;
                 lastLocation = null;
                 routePoints.clear();
+                announcedGuidePoints.clear();
+                preAnnouncedGuidePoints.clear();
+                currentPaceKmh = 0.0;
 
                 if (distanceTextView != null) {
                     distanceTextView.setText("0.00 km");
@@ -413,7 +693,13 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                 getCurrentLocation();
                 startLocationUpdates();
 
-                // UI 업데이트: 러닝 중 상태
+                // 시작 음성 안내
+                if (courseId != null && !guidePoints.isEmpty()) {
+                    speak("스케치 런을 시작합니다. 안내에 따라 이동해주세요.");
+                } else {
+                    speak("러닝을 시작합니다.");
+                }
+
                 updateButtonsForRunningState();
 
             } catch (Exception e) {
@@ -424,26 +710,22 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         }
     }
 
-    // 일시정지 메서드 추가
     private void pauseRunning() {
         if (isRunning && !isPaused) {
             isPaused = true;
             pausedTime = System.currentTimeMillis();
             stopTimer();
-
-            // UI 업데이트: 일시정지 상태
+            speak("일시정지");
             updateButtonsForPausedState();
         }
     }
 
-    // 재개 메서드 추가
     private void resumeRunning() {
         if (isRunning && isPaused) {
             isPaused = false;
             totalPausedTime += (System.currentTimeMillis() - pausedTime);
             startTimer();
-
-            // UI 업데이트: 러닝 중 상태
+            speak("다시 시작합니다");
             updateButtonsForRunningState();
         }
     }
@@ -572,6 +854,9 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
             double elapsedHours = elapsedTime / 3600000.0;
             averagePace = totalDistance / elapsedHours;
 
+            // 현재 페이스를 km/h로 저장
+            currentPaceKmh = averagePace;
+
             double averagePaceMinPerKm = 60.0 / averagePace;
             double averagePaceSeconds = averagePaceMinPerKm * 60.0;
             averagePaceTextView.setText(GoogleSignInUtils.formatPaceFromSeconds(averagePaceSeconds));
@@ -629,6 +914,13 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
 
         if (timerHandler != null) {
             timerHandler.removeCallbacksAndMessages(null);
+        }
+
+        // TTS 종료
+        if (textToSpeech != null) {
+            textToSpeech.stop();
+            textToSpeech.shutdown();
+            Log.d("TTS", "TTS 종료");
         }
     }
 }
