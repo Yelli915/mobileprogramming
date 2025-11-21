@@ -76,11 +76,11 @@ public class MainActivity extends AppCompatActivity {
         startNormalRunButton.setOnClickListener(v -> startNormalRun());
         startCourseRunButton.setOnClickListener(v -> startCourseSelection());
 
-//        viewAllButton.setOnClickListener(v -> {
-//            // 전체 기록 보기 Activity로 이동
-//            Intent intent = new Intent(MainActivity.this, RunningHistoryActivity.class);
-//            startActivity(intent);
-//        });
+        viewAllButton.setOnClickListener(v -> {
+            // 전체 기록 보기 Activity로 이동
+            Intent intent = new Intent(MainActivity.this, RunningRecordActivity.class);
+            startActivity(intent);
+        });
 
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
