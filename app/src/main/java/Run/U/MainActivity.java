@@ -23,6 +23,14 @@ public class MainActivity extends AppCompatActivity {
     private ImageButton settingsButton;
     private Button startRunButton;
 
+    // 관리자 카드 및 버튼
+    private androidx.cardview.widget.CardView adminCard;
+    private MaterialButton adminCourseButton;
+
+    // 관리자 카드 및 버튼
+    private androidx.cardview.widget.CardView adminCard;
+    private MaterialButton adminCourseButton;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -35,12 +43,45 @@ public class MainActivity extends AppCompatActivity {
         settingsButton = findViewById(R.id.settings_button);
         startRunButton = findViewById(R.id.start_run_button);
 
+<<<<<<< Updated upstream
+=======
+        totalDistanceText = findViewById(R.id.total_distance_text);
+        totalTimeText = findViewById(R.id.total_time_text);
+        runCountText = findViewById(R.id.run_count_text);
+
+        recentRunsList = findViewById(R.id.recent_runs_list);
+        noRunsText = findViewById(R.id.no_runs_text);
+        viewAllButton = findViewById(R.id.view_all_button);
+
+        adminCard = findViewById(R.id.admin_card);
+        adminCourseButton = findViewById(R.id.admin_course_button);
+
+        // 버튼 클릭 리스너
+>>>>>>> Stashed changes
         settingsButton.setOnClickListener(v -> {
             Intent intent = new Intent(MainActivity.this, SettingsActivity.class);
             startActivity(intent);
         });
 
+<<<<<<< Updated upstream
         startRunButton.setOnClickListener(v -> showRunOptions());
+=======
+        startNormalRunButton.setOnClickListener(v -> startNormalRun());
+        startCourseRunButton.setOnClickListener(v -> startCourseSelection());
+
+        if (adminCourseButton != null) {
+            adminCourseButton.setOnClickListener(v -> {
+                Intent intent = new Intent(MainActivity.this, AdminCourseActivity.class);
+                startActivity(intent);
+            });
+        }
+
+        viewAllButton.setOnClickListener(v -> {
+            // 전체 기록 보기 Activity로 이동
+            Intent intent = new Intent(MainActivity.this, RunningRecordActivity.class);
+            startActivity(intent);
+        });
+>>>>>>> Stashed changes
 
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
@@ -53,6 +94,33 @@ public class MainActivity extends AppCompatActivity {
     protected void onStart() {
         super.onStart();
         updateWelcomeMessage();
+<<<<<<< Updated upstream
+=======
+        loadWeeklyStats();
+        loadRecentRuns();
+        checkAdminRole();
+    }
+
+    private void checkAdminRole() {
+        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        if (currentUser == null) {
+            if (adminCard != null) {
+                adminCard.setVisibility(View.GONE);
+            }
+            return;
+        }
+
+        GoogleSignInUtils.checkAdminRole(currentUser, isAdmin -> {
+            if (isAdmin && adminCard != null) {
+                adminCard.setVisibility(View.VISIBLE);
+            } else if (adminCard != null) {
+                adminCard.setVisibility(View.GONE);
+            }
+        });
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
     }
 
     private void updateWelcomeMessage() {

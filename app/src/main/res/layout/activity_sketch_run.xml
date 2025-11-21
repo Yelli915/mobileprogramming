@@ -106,9 +106,24 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+<<<<<<< Updated upstream
                     android:text="총 거리"
                     android:textSize="14sp"
                     android:textColor="@android:color/darker_gray"
+=======
+                    android:text="추천 코스"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    android:textColor="?attr/colorOnSurface"
+                    android:layout_marginBottom="12dp" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/recyclerViewCourses"
+                    android:layout_width="match_parent"
+                    android:layout_height="200dp"
+                    android:clipToPadding="false"
+                    android:paddingEnd="16dp"
+>>>>>>> Stashed changes
                     android:layout_marginBottom="8dp" />
 
                 <TextView

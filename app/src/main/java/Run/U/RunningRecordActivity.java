@@ -27,6 +27,7 @@ import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.Query;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class RunningRecordActivity extends AppCompatActivity implements OnMapReadyCallback {
 
@@ -335,15 +336,21 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
             googleMap.addPolyline(polylineOptions);
 
             // 시작 지점 마커
+            LatLng startPoint = routePoints.get(0);
+            String startLocationInfo = formatLocation(startPoint.latitude, startPoint.longitude);
             googleMap.addMarker(new MarkerOptions()
-                    .position(routePoints.get(0))
-                    .title("시작"));
+                    .position(startPoint)
+                    .title("시작")
+                    .snippet(startLocationInfo));
 
             // 종료 지점 마커
             if (routePoints.size() > 1) {
+                LatLng endPoint = routePoints.get(routePoints.size() - 1);
+                String endLocationInfo = formatLocation(endPoint.latitude, endPoint.longitude);
                 googleMap.addMarker(new MarkerOptions()
-                        .position(routePoints.get(routePoints.size() - 1))
-                        .title("종료"));
+                        .position(endPoint)
+                        .title("종료")
+                        .snippet(endLocationInfo));
             }
 
             // 경로가 모두 보이도록 카메라 조정
@@ -414,6 +421,15 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
 
         totalDistanceText.setText(GoogleSignInUtils.formatDistanceKm(totalDistance));
         totalTimeText.setText(GoogleSignInUtils.formatElapsedTimeWithLabel(totalTimeMs));
+    }
+
+    private String formatLocation(double latitude, double longitude) {
+        String latDirection = latitude >= 0 ? "북위" : "남위";
+        String lngDirection = longitude >= 0 ? "동경" : "서경";
+        
+        return String.format(Locale.getDefault(), "%s %.6f, %s %.6f", 
+                latDirection, Math.abs(latitude), 
+                lngDirection, Math.abs(longitude));
     }
 }
 
