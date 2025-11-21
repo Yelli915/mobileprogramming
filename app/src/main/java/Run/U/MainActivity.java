@@ -10,6 +10,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.activity.EdgeToEdge;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -44,16 +45,6 @@ public class MainActivity extends AppCompatActivity {
     private TextView noRunsText;
     private TextView viewAllButton;
 
-    // 통계 TextViews
-    private TextView totalDistanceText;
-    private TextView totalTimeText;
-    private TextView runCountText;
-
-    // 최근 기록
-    private LinearLayout recentRunsList;
-    private TextView noRunsText;
-    private TextView viewAllButton;
-
     // 관리자 카드 및 버튼
     private androidx.cardview.widget.CardView adminCard;
     private MaterialButton adminCourseButton;
@@ -73,11 +64,6 @@ public class MainActivity extends AppCompatActivity {
         startNormalRunButton = findViewById(R.id.start_normal_run_button);
         startCourseRunButton = findViewById(R.id.start_course_run_button);
 
-        totalDistanceText = findViewById(R.id.total_distance_text);
-        totalTimeText = findViewById(R.id.total_time_text);
-        runCountText = findViewById(R.id.run_count_text);
-
-        // 통계 및 기록 뷰 초기화 (레이아웃에 있는 경우)
         totalDistanceText = findViewById(R.id.total_distance_text);
         totalTimeText = findViewById(R.id.total_time_text);
         runCountText = findViewById(R.id.run_count_text);
@@ -305,54 +291,6 @@ public class MainActivity extends AppCompatActivity {
         recentRunsList.addView(itemView);
     }
 
-    private void showRunOptions() {
-        new AlertDialog.Builder(this)
-                .setTitle("운동 시작")
-                .setItems(new String[]{"일반 운동 시작", "코스 선택하기"}, (dialog, which) -> {
-                    if (which == 0) {
-                        startNormalRun();
-                    } else {
-                        noRunsText.setVisibility(View.GONE);
-                        recentRunsList.setVisibility(View.VISIBLE);
-
-                        // 기존 아이템 제거 (no_runs_text 제외)
-                        recentRunsList.removeAllViews();
-
-                        // 최근 기록 추가
-                        for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
-                            addRecentRunItem(doc);
-                        }
-                    }
-                })
-                .addOnFailureListener(e -> {
-                    Log.e("MainActivity", "최근 기록 로드 실패", e);
-                });
-    }
-
-    private void addRecentRunItem(QueryDocumentSnapshot doc) {
-        // 간단한 기록 아이템 생성
-        TextView itemView = new TextView(this);
-
-        Double distance = doc.getDouble("totalDistance");
-        Long time = doc.getLong("totalTime");
-
-        String distanceStr = distance != null ?
-                String.format("%.2f km", distance / 1000.0) : "0.00 km";
-        String timeStr = "";
-
-        if (time != null) {
-            long minutes = time / 60;
-            long seconds = time % 60;
-            timeStr = String.format("%d:%02d", minutes, seconds);
-        }
-
-        itemView.setText(String.format("📍 %s • ⏱ %s", distanceStr, timeStr));
-        itemView.setTextSize(14);
-        itemView.setTextColor(getResources().getColor(R.color.accent_white, null));
-        itemView.setPadding(0, 16, 0, 16);
-
-        recentRunsList.addView(itemView);
-    }
 
     private void startNormalRun() {
         Intent intent = new Intent(MainActivity.this, RunningStartActivity.class);

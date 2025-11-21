@@ -101,9 +101,6 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         }
     }
 
-    private LocationRequest locationRequest;
-    private LocationCallback locationCallback;
-
     private double totalDistance = 0.0;
     private Location lastLocation = null;
     private Handler locationUpdateHandler = new Handler(Looper.getMainLooper());
@@ -286,8 +283,6 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         pauseButton.setOnClickListener(v -> pauseRunning());
         resumeButton.setOnClickListener(v -> resumeRunning());
         endRunButton.setOnClickListener(v -> endRun());
-
-        startTimerButton.setOnClickListener(v -> startRunning());
 
         // Request location permissions
         Log.d("RunningStartActivity", "위치 권한 체크 시작");
@@ -631,7 +626,7 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                     }
                 }
                 getCurrentLocation();
-                startLocationUpdates();
+                requestLocationUpdates();
             } else {
                 GoogleSignInUtils.showToast(this, "위치 권한이 필요합니다.");
                 finish();
@@ -982,7 +977,7 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
 
                 startTimer();
                 getCurrentLocation();
-                startLocationUpdates();
+                requestLocationUpdates();
 
                 // 시작 음성 안내
                 if (courseId != null && !guidePoints.isEmpty()) {

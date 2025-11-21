@@ -165,9 +165,6 @@ public class SketchRunActivity extends AppCompatActivity {
         );
         recyclerViewCourses.setLayoutManager(layoutManager);
         recyclerViewCourses.setAdapter(courseAdapter);
-
-        // 스크롤 성능 최적화
-        recyclerViewCourses.setHasFixedSize(true);
     }
 
     private void updateCourseInfo(Course course) {
