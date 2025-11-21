@@ -638,14 +638,14 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         
         Log.d("RunningStartActivity", "1순위: 최초 위치 빠른 표시 시작");
         
-        // 1단계: 캐시된 위치를 먼저 빠르게 가져와서 즉시 표시 (개선된 속도)
+        // 1단계: 캐시된 위치를 먼저 빠르게 가져와서 즉시 표시 (한국 범위 검증 완화)
         try {
             fusedLocationClient.getLastLocation().addOnSuccessListener(cachedLocation -> {
                 if (cachedLocation != null && map != null) {
                     long locationAge = System.currentTimeMillis() - cachedLocation.getTime();
                     
-                    // 캐시된 위치가 1분 이내이고 유효하면 즉시 표시
-                    if (locationAge < 60000 && isValidLocation(cachedLocation)) {
+                    // 초기 표시용: 한국 범위 검증 없이 정확도와 나이만 확인하여 즉시 표시
+                    if (locationAge < 60000 && isValidLocationForInitialDisplay(cachedLocation)) {
                         LatLng currentLatLng = new LatLng(cachedLocation.getLatitude(), cachedLocation.getLongitude());
                         currentZoomLevel = 15f;
                         map.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, currentZoomLevel));
@@ -687,7 +687,8 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                 if (location != null && map != null) {
                     long locationAge = System.currentTimeMillis() - location.getTime();
                     
-                    if (isValidLocation(location) || (locationAge < 10000 && location.getAccuracy() < 100)) {
+                    // 정확한 위치는 한국 범위 검증 포함하여 확인
+                    if (isValidLocation(location) || (locationAge < 10000 && location.getAccuracy() < 100 && isValidLocationForInitialDisplay(location))) {
                         LatLng currentLatLng = new LatLng(location.getLatitude(), location.getLongitude());
                         currentZoomLevel = 15f;
                         map.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, currentZoomLevel));
@@ -853,6 +854,33 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         double lng = location.getLongitude();
         if (lat == 0.0 && lng == 0.0) {
             Log.w("RunningStartActivity", "좌표가 (0,0)입니다 - 위치가 유효하지 않습니다");
+            return false;
+        }
+
+        return true;
+    }
+
+    // 초기 위치 표시용: 한국 범위 검증 완화 (더 빠른 표시)
+    private boolean isValidLocationForInitialDisplay(Location location) {
+        if (location == null) {
+            return false;
+        }
+
+        // 위치가 너무 오래된 경우 (1분 이상)
+        long locationAge = System.currentTimeMillis() - location.getTime();
+        if (locationAge > 60000) {
+            return false;
+        }
+
+        // 초기 표시에서는 정확도 기준 완화 (100m까지 허용)
+        if (location.getAccuracy() > 100) {
+            return false;
+        }
+
+        // 좌표가 0,0인 경우만 제외 (한국 범위 검증은 건너뜀)
+        double lat = location.getLatitude();
+        double lng = location.getLongitude();
+        if (lat == 0.0 && lng == 0.0) {
             return false;
         }
 

@@ -32,60 +32,164 @@ public class PublicDataApiClient {
         }
     }
 
-    public static void fetchCourses(int numOfRows, String filterRegion, ApiCallback callback) {
-        new FetchCoursesTask(numOfRows, filterRegion, callback).execute();
+    public static void fetchAllCourses(ApiCallback callback) {
+        new FetchAllCoursesTask(callback).execute();
     }
 
-    private static class FetchCoursesTask extends AsyncTask<Void, Void, Result> {
-        private final int numOfRows;
-        private final String filterRegion;
+    private static class FetchAllCoursesTask extends AsyncTask<Void, Void, Result> {
         private final ApiCallback callback;
+        private static final int ROWS_PER_PAGE = 100;
 
-        FetchCoursesTask(int numOfRows, String filterRegion, ApiCallback callback) {
-            this.numOfRows = numOfRows;
-            this.filterRegion = filterRegion;
+        FetchAllCoursesTask(ApiCallback callback) {
             this.callback = callback;
         }
 
         @Override
         protected Result doInBackground(Void... voids) {
+            long startTime = System.currentTimeMillis();
+            List<ApiCourseItem> allCourses = new ArrayList<>();
+            
             try {
-                StringBuilder urlBuilder = new StringBuilder(BASE_URL);
-                urlBuilder.append("?serviceKey=").append(URLEncoder.encode(SERVICE_KEY, "UTF-8"));
-                urlBuilder.append("&MobileOS=ETC");
-                urlBuilder.append("&MobileApp=RunningApp");
-                urlBuilder.append("&_type=json");
-                urlBuilder.append("&numOfRows=").append(numOfRows);
-                urlBuilder.append("&pageNo=1");
+                Log.d(TAG, "========================================");
+                Log.d(TAG, "🚀 모든 코스 가져오기 시작");
+                
+                int totalCount = 0;
+                int currentPage = 1;
+                boolean hasMorePages = true;
+                
+                while (hasMorePages) {
+                    StringBuilder urlBuilder = new StringBuilder(BASE_URL);
+                    urlBuilder.append("?serviceKey=").append(URLEncoder.encode(SERVICE_KEY, "UTF-8"));
+                    urlBuilder.append("&MobileOS=ETC");
+                    urlBuilder.append("&MobileApp=RunningApp");
+                    urlBuilder.append("&_type=json");
+                    urlBuilder.append("&numOfRows=").append(ROWS_PER_PAGE);
+                    urlBuilder.append("&pageNo=").append(currentPage);
 
-                URL url = new URL(urlBuilder.toString());
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
-                conn.setRequestProperty("Content-type", "application/json");
+                    String fullUrl = urlBuilder.toString();
+                    Log.d(TAG, "   페이지 " + currentPage + " 요청 중...");
+                    
+                    URL url = new URL(fullUrl);
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("GET");
+                    conn.setRequestProperty("Content-type", "application/json");
+                    conn.setConnectTimeout(10000);
+                    conn.setReadTimeout(10000);
 
-                if (conn.getResponseCode() >= 200 && conn.getResponseCode() <= 300) {
-                    BufferedReader rd = new BufferedReader(
-                            new InputStreamReader(conn.getInputStream(), "UTF-8"));
-                    StringBuilder sb = new StringBuilder();
-                    String line;
-                    while ((line = rd.readLine()) != null) {
-                        sb.append(line);
+                    int responseCode = conn.getResponseCode();
+                    Log.d(TAG, "   📡 HTTP 응답 코드: " + responseCode);
+
+                    if (responseCode >= 200 && responseCode <= 300) {
+                        BufferedReader rd = new BufferedReader(
+                                new InputStreamReader(conn.getInputStream(), "UTF-8"));
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = rd.readLine()) != null) {
+                            sb.append(line);
+                        }
+                        rd.close();
+                        conn.disconnect();
+
+                        String responseBody = sb.toString();
+                        PageResult pageResult = parsePage(responseBody);
+                        
+                        if (pageResult.error != null) {
+                            return new Result(null, pageResult.error);
+                        }
+                        
+                        if (currentPage == 1) {
+                            totalCount = pageResult.totalCount;
+                            Log.d(TAG, "   전체 코스 개수: " + totalCount);
+                        }
+                        
+                        allCourses.addAll(pageResult.courses);
+                        Log.d(TAG, "   페이지 " + currentPage + " 완료: " + pageResult.courses.size() + "개 (누적: " + allCourses.size() + "개)");
+                        
+                        int totalPages = (int) Math.ceil((double) totalCount / ROWS_PER_PAGE);
+                        if (currentPage >= totalPages || pageResult.courses.isEmpty()) {
+                            hasMorePages = false;
+                        } else {
+                            currentPage++;
+                        }
+                    } else {
+                        String errorMsg = "페이지 " + currentPage + " API 호출 실패: HTTP " + responseCode;
+                        Log.e(TAG, "❌ " + errorMsg);
+                        conn.disconnect();
+                        return new Result(null, errorMsg);
                     }
-                    rd.close();
-                    conn.disconnect();
-
-                    String responseBody = sb.toString();
-                    Log.d(TAG, "API 응답 받음: " + responseBody.substring(0, Math.min(200, responseBody.length())));
-
-                    return parseResponse(responseBody, filterRegion);
-                } else {
-                    String errorMsg = "API 호출 실패: HTTP " + conn.getResponseCode();
-                    Log.e(TAG, errorMsg);
-                    return new Result(null, errorMsg);
                 }
+                
+                long elapsedTime = System.currentTimeMillis() - startTime;
+                Log.d(TAG, "✅ 모든 코스 가져오기 완료 (" + elapsedTime + "ms)");
+                Log.d(TAG, "   총 " + allCourses.size() + "개 코스 수집");
+                Log.d(TAG, "========================================");
+                
+                return new Result(allCourses, null);
             } catch (Exception e) {
-                Log.e(TAG, "API 호출 중 오류", e);
+                long elapsedTime = System.currentTimeMillis() - startTime;
+                Log.e(TAG, "❌ 페이지네이션 중 오류 발생 (" + elapsedTime + "ms)", e);
+                Log.e(TAG, "   오류 메시지: " + e.getMessage());
+                e.printStackTrace();
                 return new Result(null, "네트워크 오류: " + e.getMessage());
+            }
+        }
+        
+        private static class PageResult {
+            final List<ApiCourseItem> courses;
+            final int totalCount;
+            final String error;
+            
+            PageResult(List<ApiCourseItem> courses, int totalCount, String error) {
+                this.courses = courses;
+                this.totalCount = totalCount;
+                this.error = error;
+            }
+        }
+        
+        private PageResult parsePage(String jsonString) {
+            try {
+                JSONObject jsonObject = new JSONObject(jsonString);
+                JSONObject response = jsonObject.getJSONObject("response");
+                JSONObject header = response.getJSONObject("header");
+                
+                String resultCode = header.optString("resultCode", "N/A");
+                String resultMsg = header.optString("resultMsg", "N/A");
+                
+                if (!"0000".equals(resultCode)) {
+                    return new PageResult(null, 0, "API 오류: " + resultMsg);
+                }
+                
+                JSONObject body = response.getJSONObject("body");
+                int totalCount = body.optInt("totalCount", 0);
+                
+                JSONObject items = body.getJSONObject("items");
+                JSONArray itemArray;
+                
+                if (items.has("item") && !items.isNull("item")) {
+                    Object itemObj = items.get("item");
+                    if (itemObj instanceof JSONArray) {
+                        itemArray = items.getJSONArray("item");
+                    } else {
+                        itemArray = new JSONArray();
+                        itemArray.put(items.getJSONObject("item"));
+                    }
+                } else {
+                    itemArray = new JSONArray();
+                }
+
+                List<ApiCourseItem> courses = new ArrayList<>();
+                for (int i = 0; i < itemArray.length(); i++) {
+                    JSONObject item = itemArray.getJSONObject(i);
+                    ApiCourseItem course = parseCourseItem(item);
+                    if (course != null) {
+                        courses.add(course);
+                    }
+                }
+
+                return new PageResult(courses, totalCount, null);
+            } catch (Exception e) {
+                Log.e(TAG, "❌ JSON 파싱 오류", e);
+                return new PageResult(null, 0, "데이터 파싱 오류: " + e.getMessage());
             }
         }
 
@@ -98,50 +202,6 @@ public class PublicDataApiClient {
             }
         }
 
-        private Result parseResponse(String jsonString, String filterRegion) {
-            try {
-                JSONObject jsonObject = new JSONObject(jsonString);
-                JSONObject response = jsonObject.getJSONObject("response");
-                JSONObject body = response.getJSONObject("body");
-                JSONObject items = body.getJSONObject("items");
-
-                JSONArray itemArray;
-                if (items.has("item")) {
-                    Object itemObj = items.get("item");
-                    if (itemObj instanceof JSONArray) {
-                        itemArray = items.getJSONArray("item");
-                    } else {
-                        itemArray = new JSONArray();
-                        itemArray.put(items.getJSONObject("item"));
-                    }
-                } else {
-                    itemArray = new JSONArray();
-                }
-
-                List<ApiCourseItem> allCourses = new ArrayList<>();
-                for (int i = 0; i < itemArray.length(); i++) {
-                    JSONObject item = itemArray.getJSONObject(i);
-                    ApiCourseItem course = parseCourseItem(item);
-                    if (course != null) {
-                        allCourses.add(course);
-                    }
-                }
-
-                List<ApiCourseItem> filteredCourses;
-                if (filterRegion != null && !filterRegion.trim().isEmpty()) {
-                    filteredCourses = filterByRegion(allCourses, filterRegion);
-                    Log.d(TAG, String.format("총 %d개 중 %s 지역 필터링 결과: %d개", 
-                            allCourses.size(), filterRegion, filteredCourses.size()));
-                } else {
-                    filteredCourses = allCourses;
-                }
-
-                return new Result(filteredCourses, null);
-            } catch (Exception e) {
-                Log.e(TAG, "JSON 파싱 오류", e);
-                return new Result(null, "데이터 파싱 오류: " + e.getMessage());
-            }
-        }
 
         private ApiCourseItem parseCourseItem(JSONObject item) {
             try {
@@ -169,16 +229,6 @@ public class PublicDataApiClient {
             }
         }
 
-        private List<ApiCourseItem> filterByRegion(List<ApiCourseItem> courses, String region) {
-            List<ApiCourseItem> filtered = new ArrayList<>();
-            for (ApiCourseItem course : courses) {
-                String sigun = course.getSigun();
-                if (sigun != null && sigun.contains(region)) {
-                    filtered.add(course);
-                }
-            }
-            return filtered;
-        }
     }
 }
 
