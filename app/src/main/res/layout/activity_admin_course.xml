@@ -16,7 +16,7 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            app:navigationIcon="@drawable/ic_arrow_back"
+            app:navigationIcon="?attr/homeAsUpIndicator"
             app:title="코스 등록 (관리자)"
             app:titleTextColor="?attr/colorOnSurface" />
 
