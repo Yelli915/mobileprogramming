@@ -34,6 +34,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import android.os.Handler;
 import android.os.Looper;
+import com.google.firebase.firestore.GeoPoint;
+import com.google.firebase.Timestamp;
+import com.google.firebase.firestore.FieldValue;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Calendar;
+import java.util.Date;
 
 public class AdminCourseActivity extends AppCompatActivity {
 
@@ -49,6 +56,8 @@ public class AdminCourseActivity extends AppCompatActivity {
     private MaterialButton saveCourseButton;
     private MaterialButton importSeoulCoursesButton;
     private MaterialButton clearFirestoreButton;
+    private MaterialButton uploadGyeongbokgungRunButton;
+    private MaterialButton clearGyeongbokgungButton;
     
     private ExecutorService batchExecutor;
     private volatile boolean isProcessingCancelled = false;
@@ -80,6 +89,8 @@ public class AdminCourseActivity extends AppCompatActivity {
         saveCourseButton = findViewById(R.id.save_course_button);
         importSeoulCoursesButton = findViewById(R.id.import_seoul_courses_button);
         clearFirestoreButton = findViewById(R.id.clear_firestore_button);
+        uploadGyeongbokgungRunButton = findViewById(R.id.upload_gyeongbokgung_run_button);
+        clearGyeongbokgungButton = findViewById(R.id.clear_gyeongbokgung_button);
 
         if (saveCourseButton != null) {
             saveCourseButton.setOnClickListener(v -> saveCourse());
@@ -101,6 +112,20 @@ public class AdminCourseActivity extends AppCompatActivity {
             clearFirestoreButton.setOnClickListener(v -> {
                 Log.d("AdminCourseActivity", "데이터 비우기 버튼 클릭됨");
                 clearFirestoreData();
+            });
+        }
+
+        if (uploadGyeongbokgungRunButton != null) {
+            uploadGyeongbokgungRunButton.setOnClickListener(v -> {
+                Log.d("AdminCourseActivity", "경복궁 데이터 업로드 버튼 클릭됨");
+                uploadGyeongbokgungRun();
+            });
+        }
+
+        if (clearGyeongbokgungButton != null) {
+            clearGyeongbokgungButton.setOnClickListener(v -> {
+                Log.d("AdminCourseActivity", "경복궁 데이터 비우기 버튼 클릭됨");
+                clearGyeongbokgungData();
             });
         }
 
@@ -206,6 +231,21 @@ public class AdminCourseActivity extends AppCompatActivity {
                 return;
             }
 
+            // pathEncoded에서 시작/종료 지점 추출
+            GeoPoint startMarker = null;
+            GeoPoint endMarker = null;
+            try {
+                List<LatLng> pathPoints = PolylineUtils.decode(pathEncoded);
+                if (pathPoints != null && !pathPoints.isEmpty()) {
+                    LatLng startPoint = pathPoints.get(0);
+                    LatLng endPoint = pathPoints.get(pathPoints.size() - 1);
+                    startMarker = new GeoPoint(startPoint.latitude, startPoint.longitude);
+                    endMarker = new GeoPoint(endPoint.latitude, endPoint.longitude);
+                }
+            } catch (Exception e) {
+                Log.w("AdminCourseActivity", "경로 디코딩 실패 - startMarker/endMarker 생략", e);
+            }
+
             Map<String, Object> courseData = new HashMap<>();
             courseData.put("name", name);
             courseData.put("description", description);
@@ -213,6 +253,12 @@ public class AdminCourseActivity extends AppCompatActivity {
             courseData.put("difficulty", difficulty);
             courseData.put("estimatedTime", estimatedTime * 60);
             courseData.put("pathEncoded", pathEncoded);
+            if (startMarker != null) {
+                courseData.put("startMarker", startMarker);
+            }
+            if (endMarker != null) {
+                courseData.put("endMarker", endMarker);
+            }
             courseData.put("adminCreatorId", currentUser.getUid());
             courseData.put("createdAt", FieldValue.serverTimestamp());
 
@@ -867,6 +913,528 @@ public class AdminCourseActivity extends AppCompatActivity {
         }
         
         return points;
+    }
+
+    private void uploadGyeongbokgungRun() {
+        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        if (currentUser == null) {
+            GoogleSignInUtils.showToast(this, "로그인이 필요합니다.");
+            return;
+        }
+
+        String userId = currentUser.getUid();
+        String adminCreatorId = currentUser.getUid();
+
+        // 경복궁 실제 외곽 경로 하드코딩 (경복궁 주변 도로를 따라가는 실제 러닝 코스)
+        // 경복궁 중심 좌표: 37.5796, 126.9770
+        // 실제 경복궁 주변 도로를 따라 시계방향으로 한 바퀴 도는 경로
+        List<LatLng> gyeongbokgungPath = new ArrayList<>();
+        
+        // 광화문광장(시작점) -> 세종대로 -> 경복궁 북쪽 -> 인사동 -> 경복궁 남쪽 -> 광화문광장
+        // 실제 GPS 좌표 기반 경로
+        
+        // 1. 광화문광장 (시작점)
+        gyeongbokgungPath.add(new LatLng(37.5750, 126.9768));
+        
+        // 2. 세종대로를 따라 북쪽으로
+        gyeongbokgungPath.add(new LatLng(37.5760, 126.9768));
+        gyeongbokgungPath.add(new LatLng(37.5770, 126.9768));
+        gyeongbokgungPath.add(new LatLng(37.5780, 126.9768));
+        gyeongbokgungPath.add(new LatLng(37.5790, 126.9768));
+        gyeongbokgungPath.add(new LatLng(37.5800, 126.9768));
+        gyeongbokgungPath.add(new LatLng(37.5810, 126.9768));
+        
+        // 3. 경복궁 북쪽 도로 (신무문 방향)
+        gyeongbokgungPath.add(new LatLng(37.5815, 126.9770));
+        gyeongbokgungPath.add(new LatLng(37.5818, 126.9775));
+        gyeongbokgungPath.add(new LatLng(37.5820, 126.9780));
+        gyeongbokgungPath.add(new LatLng(37.5820, 126.9785));
+        
+        // 4. 경복궁 동쪽 도로 (건춘문 방향)
+        gyeongbokgungPath.add(new LatLng(37.5815, 126.9790));
+        gyeongbokgungPath.add(new LatLng(37.5805, 126.9795));
+        gyeongbokgungPath.add(new LatLng(37.5795, 126.9800));
+        gyeongbokgungPath.add(new LatLng(37.5785, 126.9800));
+        gyeongbokgungPath.add(new LatLng(37.5775, 126.9800));
+        
+        // 5. 경복궁 남쪽 도로 (인사동 방향)
+        gyeongbokgungPath.add(new LatLng(37.5765, 126.9795));
+        gyeongbokgungPath.add(new LatLng(37.5760, 126.9790));
+        gyeongbokgungPath.add(new LatLng(37.5755, 126.9785));
+        gyeongbokgungPath.add(new LatLng(37.5752, 126.9780));
+        gyeongbokgungPath.add(new LatLng(37.5750, 126.9775));
+        
+        // 6. 경복궁 서쪽 도로 (영추문 방향)
+        gyeongbokgungPath.add(new LatLng(37.5750, 126.9770));
+        gyeongbokgungPath.add(new LatLng(37.5750, 126.9765));
+        gyeongbokgungPath.add(new LatLng(37.5752, 126.9760));
+        gyeongbokgungPath.add(new LatLng(37.5755, 126.9755));
+        gyeongbokgungPath.add(new LatLng(37.5760, 126.9750));
+        gyeongbokgungPath.add(new LatLng(37.5765, 126.9748));
+        gyeongbokgungPath.add(new LatLng(37.5770, 126.9745));
+        gyeongbokgungPath.add(new LatLng(37.5775, 126.9743));
+        gyeongbokgungPath.add(new LatLng(37.5780, 126.9740));
+        
+        // 7. 경복궁 북서쪽 도로
+        gyeongbokgungPath.add(new LatLng(37.5785, 126.9740));
+        gyeongbokgungPath.add(new LatLng(37.5790, 126.9742));
+        gyeongbokgungPath.add(new LatLng(37.5795, 126.9745));
+        gyeongbokgungPath.add(new LatLng(37.5800, 126.9748));
+        gyeongbokgungPath.add(new LatLng(37.5805, 126.9750));
+        gyeongbokgungPath.add(new LatLng(37.5810, 126.9752));
+        gyeongbokgungPath.add(new LatLng(37.5815, 126.9755));
+        gyeongbokgungPath.add(new LatLng(37.5818, 126.9760));
+        gyeongbokgungPath.add(new LatLng(37.5820, 126.9765));
+        
+        // 8. 다시 세종대로로 합류하여 시작점으로 복귀
+        gyeongbokgungPath.add(new LatLng(37.5815, 126.9768));
+        gyeongbokgungPath.add(new LatLng(37.5805, 126.9768));
+        gyeongbokgungPath.add(new LatLng(37.5795, 126.9768));
+        gyeongbokgungPath.add(new LatLng(37.5785, 126.9768));
+        gyeongbokgungPath.add(new LatLng(37.5775, 126.9768));
+        gyeongbokgungPath.add(new LatLng(37.5765, 126.9768));
+        gyeongbokgungPath.add(new LatLng(37.5755, 126.9768));
+        gyeongbokgungPath.add(new LatLng(37.5750, 126.9768)); // 시작점으로 복귀
+
+        // 경로를 Encoded Polyline으로 변환
+        String pathEncoded = PolylineUtils.encode(gyeongbokgungPath);
+        
+        // 거리 계산 (대략적인 계산)
+        double totalDistance = calculatePathDistance(gyeongbokgungPath); // 미터 단위
+        long estimatedTime = (long) (totalDistance / 1000.0 * 4.0 * 60); // 4분/km 기준으로 계산 (초 단위)
+        
+        // 시작/종료 지점
+        GeoPoint startMarker = new GeoPoint(gyeongbokgungPath.get(0).latitude, gyeongbokgungPath.get(0).longitude);
+        GeoPoint endMarker = new GeoPoint(gyeongbokgungPath.get(gyeongbokgungPath.size() - 1).latitude, 
+                                         gyeongbokgungPath.get(gyeongbokgungPath.size() - 1).longitude);
+
+        // 먼저 코스가 있는지 확인
+        firestore.collection("courses")
+                .whereEqualTo("name", "경복궁 러닝코스")
+                .get()
+                .addOnCompleteListener(courseCheckTask -> {
+                    if (courseCheckTask.isSuccessful() && !courseCheckTask.getResult().isEmpty()) {
+                        // 코스가 이미 존재하는 경우
+                        QueryDocumentSnapshot existingCourse = (QueryDocumentSnapshot) courseCheckTask.getResult().getDocuments().get(0);
+                        String courseId = existingCourse.getId();
+                        Log.d("AdminCourseActivity", "기존 경복궁 코스 사용: " + courseId);
+                        saveRunRecord(userId, courseId, totalDistance, estimatedTime, pathEncoded, startMarker, endMarker);
+                    } else {
+                        // 코스가 없는 경우 새로 생성
+                        Map<String, Object> courseData = new HashMap<>();
+                        courseData.put("name", "경복궁 러닝코스");
+                        courseData.put("description", "경복궁 테두리를 도는 러닝 코스입니다. 역사적인 궁궐을 감상하며 운동할 수 있습니다.");
+                        courseData.put("totalDistance", totalDistance);
+                        courseData.put("difficulty", "medium");
+                        courseData.put("estimatedTime", estimatedTime);
+                        courseData.put("pathEncoded", pathEncoded);
+                        courseData.put("startMarker", startMarker);
+                        courseData.put("endMarker", endMarker);
+                        courseData.put("adminCreatorId", adminCreatorId);
+                        courseData.put("createdAt", FieldValue.serverTimestamp());
+
+                        firestore.collection("courses")
+                                .add(courseData)
+                                .addOnSuccessListener(documentReference -> {
+                                    String courseId = documentReference.getId();
+                                    Log.d("AdminCourseActivity", "경복궁 코스 생성 성공: " + courseId);
+                                    saveRunRecord(userId, courseId, totalDistance, estimatedTime, pathEncoded, startMarker, endMarker);
+                                })
+                                .addOnFailureListener(e -> {
+                                    Log.e("AdminCourseActivity", "경복궁 코스 생성 실패", e);
+                                    GoogleSignInUtils.showToast(this, "코스 생성에 실패했습니다: " + e.getMessage());
+                                });
+                    }
+                });
+    }
+
+    private double calculatePathDistance(List<LatLng> path) {
+        if (path == null || path.size() < 2) {
+            return 0;
+        }
+        
+        double totalDistance = 0;
+        for (int i = 0; i < path.size() - 1; i++) {
+            LatLng point1 = path.get(i);
+            LatLng point2 = path.get(i + 1);
+            
+            // Haversine 공식을 사용한 거리 계산 (미터 단위)
+            double lat1 = Math.toRadians(point1.latitude);
+            double lat2 = Math.toRadians(point2.latitude);
+            double lon1 = Math.toRadians(point1.longitude);
+            double lon2 = Math.toRadians(point2.longitude);
+            
+            double dLat = lat2 - lat1;
+            double dLon = lon2 - lon1;
+            
+            double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1) * Math.cos(lat2) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            
+            double distance = 6371000 * c; // 지구 반지름 6371km를 미터로 변환
+            totalDistance += distance;
+        }
+        
+        return totalDistance;
+    }
+
+    private void saveRunRecord(String userId, String courseId, double totalDistance, long estimatedTime, 
+                              String pathEncoded, GeoPoint startMarker, GeoPoint endMarker) {
+        // 이번 주 날짜 계산 (오늘부터 3일 전)
+        Calendar calendar = Calendar.getInstance();
+        calendar.add(Calendar.DAY_OF_YEAR, -3);
+        Date startTimeDate = calendar.getTime();
+        Date endTimeDate = new Date(startTimeDate.getTime() + estimatedTime * 1000);
+
+        // 평균 페이스 계산 (초/km)
+        double totalDistanceKm = totalDistance / 1000.0;
+        double averagePaceSeconds = estimatedTime / totalDistanceKm;
+
+        // 러닝 기록 데이터 생성
+        Map<String, Object> runData = new HashMap<>();
+        runData.put("type", "sketch");
+        runData.put("startTime", new Timestamp(startTimeDate));
+        runData.put("endTime", new Timestamp(endTimeDate));
+        runData.put("totalDistance", totalDistance);
+        runData.put("totalTime", estimatedTime);
+        runData.put("averagePace", averagePaceSeconds);
+        runData.put("pathEncoded", pathEncoded);
+        runData.put("courseId", courseId);
+        runData.put("startMarker", startMarker);
+        runData.put("endMarker", endMarker);
+        runData.put("createdAt", FieldValue.serverTimestamp());
+
+        // Firestore에 저장
+        firestore.collection("users")
+                .document(userId)
+                .collection("runs")
+                .add(runData)
+                .addOnSuccessListener(documentReference -> {
+                    Log.d("AdminCourseActivity", "경복궁 러닝 기록 저장 성공: " + documentReference.getId());
+                    GoogleSignInUtils.showToast(this, "경복궁 러닝 기록이 추가되었습니다.");
+                })
+                .addOnFailureListener(e -> {
+                    Log.e("AdminCourseActivity", "경복궁 러닝 기록 저장 실패", e);
+                    GoogleSignInUtils.showToast(this, "기록 저장에 실패했습니다: " + e.getMessage());
+                });
+    }
+
+    private void clearGyeongbokgungData() {
+        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        if (currentUser == null) {
+            GoogleSignInUtils.showToast(this, "로그인이 필요합니다.");
+            return;
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("⚠️ 경고")
+                .setMessage("경복궁 러닝코스와 관련된 모든 데이터를 삭제하시겠습니까?\n\n- 경복궁 코스\n- 경복궁 코스 관련 러닝 기록\n\n이 작업은 되돌릴 수 없습니다!")
+                .setPositiveButton("삭제", (dialog, which) -> {
+                    Log.d("AdminCourseActivity", "사용자가 경복궁 데이터 삭제 확인");
+                    executeClearGyeongbokgung();
+                })
+                .setNegativeButton("취소", null)
+                .show();
+    }
+
+    private void executeClearGyeongbokgung() {
+        clearGyeongbokgungButton.setEnabled(false);
+        clearGyeongbokgungButton.setText("삭제 중...");
+
+        ProgressDialog progressDialog = new ProgressDialog(this);
+        progressDialog.setMessage("경복궁 데이터를 삭제하는 중...");
+        progressDialog.setCancelable(false);
+        progressDialog.show();
+
+        Log.d("AdminCourseActivity", "경복궁 데이터 삭제 시작");
+
+        // 1. 먼저 경복궁 코스 찾기
+        firestore.collection("courses")
+                .whereEqualTo("name", "경복궁 러닝코스")
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+                    if (queryDocumentSnapshots.isEmpty()) {
+                        progressDialog.dismiss();
+                        resetClearGyeongbokgungButton();
+                        GoogleSignInUtils.showToast(this, "경복궁 코스가 없습니다.");
+                        Log.d("AdminCourseActivity", "경복궁 코스 없음");
+                        return;
+                    }
+
+                    // 경복궁 코스 ID 수집
+                    List<String> courseIds = new ArrayList<>();
+                    for (QueryDocumentSnapshot document : queryDocumentSnapshots) {
+                        courseIds.add(document.getId());
+                    }
+
+                    Log.d("AdminCourseActivity", "경복궁 코스 발견: " + courseIds.size() + "개");
+
+                    // 2. 먼저 모든 사용자의 경복궁 관련 러닝 기록 삭제
+                    progressDialog.setMessage("경복궁 관련 러닝 기록 삭제 중...");
+                    deleteGyeongbokgungRuns(courseIds, () -> {
+                        // 3. 러닝 기록 삭제 완료 후 코스 삭제
+                        progressDialog.setMessage("경복궁 코스 삭제 중... (" + courseIds.size() + "개)");
+                        deleteGyeongbokgungCourses(courseIds, progressDialog);
+                    }, progressDialog);
+                })
+                .addOnFailureListener(e -> {
+                    progressDialog.dismiss();
+                    resetClearGyeongbokgungButton();
+                    Log.e("AdminCourseActivity", "❌ 경복궁 코스 조회 실패", e);
+                    GoogleSignInUtils.showToast(this, "데이터 조회 실패: " + e.getMessage());
+                });
+    }
+
+    private void deleteGyeongbokgungCourses(List<String> courseIds, ProgressDialog progressDialog) {
+        if (courseIds.isEmpty()) {
+            progressDialog.dismiss();
+            resetClearGyeongbokgungButton();
+            GoogleSignInUtils.showToast(this, "경복궁 데이터 삭제 완료!");
+            return;
+        }
+
+        AtomicInteger deletedCourseCount = new AtomicInteger(0);
+        AtomicInteger totalCourseCount = new AtomicInteger(courseIds.size());
+        AtomicInteger completedCourseCount = new AtomicInteger(0);
+
+        for (String courseId : courseIds) {
+            // guidePoints 하위 컬렉션 먼저 삭제
+            firestore.collection("courses")
+                    .document(courseId)
+                    .collection("guidePoints")
+                    .get()
+                    .addOnSuccessListener(guidePointsSnapshot -> {
+                        int totalGuidePoints = guidePointsSnapshot.size();
+                        
+                        if (totalGuidePoints == 0) {
+                            // guidePoints가 없으면 코스만 삭제
+                            deleteCourseWithCallback(courseId, deletedCourseCount, totalCourseCount, completedCourseCount, progressDialog);
+                        } else {
+                            // guidePoints 삭제
+                            AtomicInteger deletedGuidePoints = new AtomicInteger(0);
+                            for (QueryDocumentSnapshot guidePointDoc : guidePointsSnapshot) {
+                                firestore.collection("courses")
+                                        .document(courseId)
+                                        .collection("guidePoints")
+                                        .document(guidePointDoc.getId())
+                                        .delete()
+                                        .addOnSuccessListener(aVoid -> {
+                                            if (deletedGuidePoints.incrementAndGet() >= totalGuidePoints) {
+                                                // guidePoints 삭제 완료 후 코스 삭제
+                                                deleteCourseWithCallback(courseId, deletedCourseCount, totalCourseCount, completedCourseCount, progressDialog);
+                                            }
+                                        })
+                                        .addOnFailureListener(e -> {
+                                            Log.e("AdminCourseActivity", "guidePoint 삭제 실패: " + guidePointDoc.getId(), e);
+                                            if (deletedGuidePoints.incrementAndGet() >= totalGuidePoints) {
+                                                deleteCourseWithCallback(courseId, deletedCourseCount, totalCourseCount, completedCourseCount, progressDialog);
+                                            }
+                                        });
+                            }
+                        }
+                    })
+                    .addOnFailureListener(e -> {
+                        Log.e("AdminCourseActivity", "guidePoints 조회 실패: " + courseId, e);
+                        // 조회 실패해도 코스는 삭제 시도
+                        deleteCourseWithCallback(courseId, deletedCourseCount, totalCourseCount, completedCourseCount, progressDialog);
+                    });
+        }
+    }
+
+    private void deleteCourseWithCallback(String courseId, AtomicInteger deletedCourseCount, AtomicInteger totalCourseCount, 
+                                         AtomicInteger completedCourseCount, ProgressDialog progressDialog) {
+        firestore.collection("courses")
+                .document(courseId)
+                .delete()
+                .addOnSuccessListener(aVoid -> {
+                    int deleted = deletedCourseCount.incrementAndGet();
+                    int completed = completedCourseCount.incrementAndGet();
+                    Log.d("AdminCourseActivity", "경복궁 코스 삭제 완료: " + courseId + " (" + deleted + "/" + totalCourseCount.get() + ")");
+                    
+                    if (completed >= totalCourseCount.get()) {
+                        progressDialog.dismiss();
+                        resetClearGyeongbokgungButton();
+                        String message = String.format("경복궁 데이터 삭제 완료!\n코스: %d개 삭제", deleted);
+                        GoogleSignInUtils.showToast(this, "경복궁 데이터 삭제 완료!");
+                        new AlertDialog.Builder(this)
+                                .setTitle("삭제 완료")
+                                .setMessage(message)
+                                .setPositiveButton("확인", null)
+                                .show();
+                        Log.d("AdminCourseActivity", "✅ 경복궁 데이터 삭제 완료");
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Log.e("AdminCourseActivity", "경복궁 코스 삭제 실패: " + courseId, e);
+                    int completed = completedCourseCount.incrementAndGet();
+                    if (completed >= totalCourseCount.get()) {
+                        progressDialog.dismiss();
+                        resetClearGyeongbokgungButton();
+                        GoogleSignInUtils.showToast(this, "경복궁 데이터 삭제 완료!");
+                    }
+                });
+    }
+
+    private void deleteGyeongbokgungRuns(List<String> courseIds, Runnable onComplete, ProgressDialog progressDialog) {
+        if (courseIds.isEmpty()) {
+            if (onComplete != null) {
+                onComplete.run();
+            }
+            return;
+        }
+
+        // 모든 사용자 조회
+        firestore.collection("users")
+                .get()
+                .addOnSuccessListener(usersSnapshot -> {
+                    AtomicInteger totalRunsDeleted = new AtomicInteger(0);
+                    AtomicInteger totalUsersProcessed = new AtomicInteger(0);
+                    int totalUsers = usersSnapshot.size();
+
+                    if (totalUsers == 0) {
+                        Log.d("AdminCourseActivity", "사용자가 없습니다.");
+                        if (onComplete != null) {
+                            onComplete.run();
+                        }
+                        return;
+                    }
+
+                    // whereIn은 최대 10개까지만 지원하므로, courseIds가 10개를 넘으면 개별적으로 처리
+                    for (QueryDocumentSnapshot userDoc : usersSnapshot) {
+                        String userId = userDoc.getId();
+                        
+                        // courseIds가 10개 이하면 whereIn 사용, 그 이상이면 개별 쿼리
+                        if (courseIds.size() <= 10) {
+                            deleteRunsForUser(userId, courseIds, totalRunsDeleted, totalUsersProcessed, totalUsers, onComplete);
+                        } else {
+                            // 10개 이상이면 각 courseId에 대해 개별 쿼리
+                            deleteRunsForUserMultipleQueries(userId, courseIds, totalRunsDeleted, totalUsersProcessed, totalUsers, onComplete);
+                        }
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Log.e("AdminCourseActivity", "❌ 사용자 조회 실패", e);
+                    GoogleSignInUtils.showToast(this, "사용자 조회 실패: " + e.getMessage());
+                    if (onComplete != null) {
+                        onComplete.run();
+                    }
+                });
+    }
+
+    private void deleteRunsForUser(String userId, List<String> courseIds, AtomicInteger totalRunsDeleted, 
+                                   AtomicInteger totalUsersProcessed, int totalUsers, Runnable onComplete) {
+        firestore.collection("users")
+                .document(userId)
+                .collection("runs")
+                .whereIn("courseId", courseIds)
+                .get()
+                .addOnSuccessListener(runsSnapshot -> {
+                    int runsCount = runsSnapshot.size();
+                    if (runsCount > 0) {
+                        AtomicInteger deletedCount = new AtomicInteger(0);
+                        for (QueryDocumentSnapshot runDoc : runsSnapshot) {
+                            firestore.collection("users")
+                                    .document(userId)
+                                    .collection("runs")
+                                    .document(runDoc.getId())
+                                    .delete()
+                                    .addOnSuccessListener(aVoid -> {
+                                        totalRunsDeleted.incrementAndGet();
+                                        if (deletedCount.incrementAndGet() >= runsCount) {
+                                            checkAllUsersProcessed(totalUsersProcessed, totalUsers, totalRunsDeleted, onComplete);
+                                        }
+                                    })
+                                    .addOnFailureListener(e -> {
+                                        Log.e("AdminCourseActivity", "러닝 기록 삭제 실패: " + runDoc.getId(), e);
+                                        if (deletedCount.incrementAndGet() >= runsCount) {
+                                            checkAllUsersProcessed(totalUsersProcessed, totalUsers, totalRunsDeleted, onComplete);
+                                        }
+                                    });
+                        }
+                    } else {
+                        checkAllUsersProcessed(totalUsersProcessed, totalUsers, totalRunsDeleted, onComplete);
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Log.e("AdminCourseActivity", "러닝 기록 조회 실패: " + userId, e);
+                    checkAllUsersProcessed(totalUsersProcessed, totalUsers, totalRunsDeleted, onComplete);
+                });
+    }
+
+    private void deleteRunsForUserMultipleQueries(String userId, List<String> courseIds, AtomicInteger totalRunsDeleted,
+                                                  AtomicInteger totalUsersProcessed, int totalUsers, Runnable onComplete) {
+        // courseIds를 10개씩 나누어 처리
+        AtomicInteger batchProcessed = new AtomicInteger(0);
+        int totalBatches = (courseIds.size() + 9) / 10; // 올림 계산
+        
+        for (int i = 0; i < courseIds.size(); i += 10) {
+            int endIndex = Math.min(i + 10, courseIds.size());
+            List<String> batch = courseIds.subList(i, endIndex);
+            
+            firestore.collection("users")
+                    .document(userId)
+                    .collection("runs")
+                    .whereIn("courseId", batch)
+                    .get()
+                    .addOnSuccessListener(runsSnapshot -> {
+                        int runsCount = runsSnapshot.size();
+                        if (runsCount > 0) {
+                            AtomicInteger deletedCount = new AtomicInteger(0);
+                            for (QueryDocumentSnapshot runDoc : runsSnapshot) {
+                                firestore.collection("users")
+                                        .document(userId)
+                                        .collection("runs")
+                                        .document(runDoc.getId())
+                                        .delete()
+                                        .addOnSuccessListener(aVoid -> {
+                                            totalRunsDeleted.incrementAndGet();
+                                            if (deletedCount.incrementAndGet() >= runsCount) {
+                                                if (batchProcessed.incrementAndGet() >= totalBatches) {
+                                                    checkAllUsersProcessed(totalUsersProcessed, totalUsers, totalRunsDeleted, onComplete);
+                                                }
+                                            }
+                                        })
+                                        .addOnFailureListener(e -> {
+                                            Log.e("AdminCourseActivity", "러닝 기록 삭제 실패: " + runDoc.getId(), e);
+                                            if (deletedCount.incrementAndGet() >= runsCount) {
+                                                if (batchProcessed.incrementAndGet() >= totalBatches) {
+                                                    checkAllUsersProcessed(totalUsersProcessed, totalUsers, totalRunsDeleted, onComplete);
+                                                }
+                                            }
+                                        });
+                            }
+                        } else {
+                            if (batchProcessed.incrementAndGet() >= totalBatches) {
+                                checkAllUsersProcessed(totalUsersProcessed, totalUsers, totalRunsDeleted, onComplete);
+                            }
+                        }
+                    })
+                    .addOnFailureListener(e -> {
+                        Log.e("AdminCourseActivity", "러닝 기록 조회 실패: " + userId, e);
+                        if (batchProcessed.incrementAndGet() >= totalBatches) {
+                            checkAllUsersProcessed(totalUsersProcessed, totalUsers, totalRunsDeleted, onComplete);
+                        }
+                    });
+        }
+    }
+
+    private void checkAllUsersProcessed(AtomicInteger totalUsersProcessed, int totalUsers, 
+                                       AtomicInteger totalRunsDeleted, Runnable onComplete) {
+        int processed = totalUsersProcessed.incrementAndGet();
+        if (processed >= totalUsers) {
+            Log.d("AdminCourseActivity", "경복궁 관련 러닝 기록 삭제 완료: " + totalRunsDeleted.get() + "개");
+            if (onComplete != null) {
+                onComplete.run();
+            }
+        }
+    }
+
+    private void resetClearGyeongbokgungButton() {
+        if (clearGyeongbokgungButton != null) {
+            clearGyeongbokgungButton.setEnabled(true);
+            clearGyeongbokgungButton.setText("경복궁 데이터 비우기");
+        }
     }
 }
 

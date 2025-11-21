@@ -7,6 +7,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.TextView;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentManager;
@@ -23,6 +24,8 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.GeoPoint;
+import com.google.firebase.firestore.ListenerRegistration;
+import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.Query;
 import java.util.ArrayList;
@@ -47,6 +50,8 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
     private FirebaseFirestore firestore;
     private FirebaseAuth firebaseAuth;
     private List<RunningRecord> records = new ArrayList<>();
+    private ListenerRegistration runsListener;
+    private RunningRecord selectedRecord = null; // 현재 선택된 기록 추적
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -85,30 +90,171 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
 
         String userId = currentUser.getUid();
 
-        firestore.collection("users")
+        // 기존 리스너 제거
+        if (runsListener != null) {
+            runsListener.remove();
+        }
+
+        // 실시간 리스너 등록
+        runsListener = firestore.collection("users")
                 .document(userId)
                 .collection("runs")
                 .orderBy("startTime", Query.Direction.DESCENDING)
-                .get()
-                .addOnCompleteListener(task -> {
-                    if (task.isSuccessful()) {
-                        records.clear();
-                        for (QueryDocumentSnapshot document : task.getResult()) {
+                .addSnapshotListener((snapshot, e) -> {
+                    if (e != null) {
+                        Log.w("RunningRecordActivity", "기록 리스너 오류", e);
+                        return;
+                    }
+
+                    if (snapshot != null) {
+                        // 초기 로드인지 확인 (getDocumentChanges가 비어있으면 초기 로드)
+                        if (snapshot.getDocumentChanges().isEmpty()) {
+                            // 초기 로드: 전체 리스트 다시 구성
+                            records.clear();
+                            for (com.google.firebase.firestore.DocumentSnapshot document : snapshot.getDocuments()) {
+                                if (document instanceof QueryDocumentSnapshot) {
+                                    RunningRecord record = documentToRunningRecord((QueryDocumentSnapshot) document);
+                                    if (record != null) {
+                                        records.add(record);
+                                    }
+                                }
+                            }
+                            records.sort((r1, r2) -> Long.compare(r2.getCreatedAt(), r1.getCreatedAt()));
+                            
+                            // 통계 업데이트
+                            updateStatistics();
+                            
+                            // 빈 상태 처리
+                            if (records.isEmpty()) {
+                                selectedRecord = null;
+                                if (googleMap != null) {
+                                    googleMap.clear();
+                                }
+                            } else {
+                                // 첫 번째 기록 선택
+                                if (googleMap != null) {
+                                    selectedRecord = records.get(0);
+                                    updateMapForRecord(selectedRecord);
+                                }
+                            }
+                            
+                            if (recordAdapter != null) {
+                                recordAdapter.notifyDataSetChanged();
+                            }
+                        } else {
+                            // 변경사항 처리
+                            for (DocumentChange dc : snapshot.getDocumentChanges()) {
+                            QueryDocumentSnapshot document = dc.getDocument();
                             RunningRecord record = documentToRunningRecord(document);
-                            if (record != null) {
-                                records.add(record);
+                            
+                            if (record == null) {
+                                continue;
+                            }
+
+                            switch (dc.getType()) {
+                                case ADDED:
+                                    // 기록 추가
+                                    int insertPosition = findInsertPosition(record);
+                                    records.add(insertPosition, record);
+                                    Log.d("RunningRecordActivity", "기록 추가됨: " + record.getId());
+                                    if (recordAdapter != null) {
+                                        recordAdapter.notifyItemInserted(insertPosition);
+                                    }
+                                    break;
+                                case MODIFIED:
+                                    // 기록 수정
+                                    int modifyIndex = -1;
+                                    for (int i = 0; i < records.size(); i++) {
+                                        if (records.get(i).getId().equals(record.getId())) {
+                                            modifyIndex = i;
+                                            records.set(i, record);
+                                            Log.d("RunningRecordActivity", "기록 수정됨: " + record.getId());
+                                            
+                                            // 선택된 기록이 수정된 경우 지도 업데이트
+                                            if (selectedRecord != null && selectedRecord.getId().equals(record.getId())) {
+                                                selectedRecord = record;
+                                                updateMapForRecord(record);
+                                            }
+                                            break;
+                                        }
+                                    }
+                                    
+                                    // 정렬이 필요할 수 있으므로 재정렬
+                                    records.sort((r1, r2) -> Long.compare(r2.getCreatedAt(), r1.getCreatedAt()));
+                                    
+                                    // 새로운 위치 찾기
+                                    int newPosition = -1;
+                                    for (int i = 0; i < records.size(); i++) {
+                                        if (records.get(i).getId().equals(record.getId())) {
+                                            newPosition = i;
+                                            break;
+                                        }
+                                    }
+                                    
+                                    if (recordAdapter != null && modifyIndex >= 0) {
+                                        if (modifyIndex != newPosition) {
+                                            // 위치가 변경된 경우
+                                            recordAdapter.notifyItemMoved(modifyIndex, newPosition);
+                                        }
+                                        recordAdapter.notifyItemChanged(newPosition);
+                                    }
+                                    break;
+                                case REMOVED:
+                                    // 기록 삭제
+                                    int removeIndex = -1;
+                                    for (int i = 0; i < records.size(); i++) {
+                                        if (records.get(i).getId().equals(record.getId())) {
+                                            removeIndex = i;
+                                            break;
+                                        }
+                                    }
+                                    
+                                    if (removeIndex >= 0) {
+                                        records.remove(removeIndex);
+                                        Log.d("RunningRecordActivity", "기록 삭제됨: " + record.getId());
+                                        
+                                        // 선택된 기록이 삭제된 경우
+                                        if (selectedRecord != null && selectedRecord.getId().equals(record.getId())) {
+                                            selectedRecord = null;
+                                            if (googleMap != null) {
+                                                googleMap.clear();
+                                            }
+                                            // 첫 번째 기록 선택
+                                            if (!records.isEmpty()) {
+                                                selectedRecord = records.get(0);
+                                                updateMapForRecord(selectedRecord);
+                                            }
+                                        }
+                                        
+                                        if (recordAdapter != null) {
+                                            recordAdapter.notifyItemRemoved(removeIndex);
+                                        }
+                                    }
+                                    break;
                             }
                         }
-                        setupRecyclerView();
+
+                        }
+                        
+                        // 통계 업데이트
                         updateStatistics();
                         
-                        // 첫 번째 기록의 경로 표시
-                        if (!records.isEmpty() && googleMap != null) {
-                            updateMapForRecord(records.get(0));
+                        // 빈 상태 처리
+                        if (records.isEmpty()) {
+                            selectedRecord = null;
+                            if (googleMap != null) {
+                                googleMap.clear();
+                            }
+                            if (recordAdapter != null) {
+                                recordAdapter.notifyDataSetChanged();
+                            }
+                        } else {
+                            // 선택된 기록이 없으면 첫 번째 기록 선택
+                            if (selectedRecord == null && googleMap != null) {
+                                selectedRecord = records.get(0);
+                                updateMapForRecord(selectedRecord);
+                            }
                         }
-                    } else {
-                        Log.w("RunningRecordActivity", "기록 로드 실패", task.getException());
-                        GoogleSignInUtils.showToast(this, "기록을 불러오는데 실패했습니다.");
                     }
                 });
     }
@@ -279,11 +425,31 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
     }
 
     private void setupRecyclerView() {
-        recordAdapter = new RunningRecordAdapter(records, record -> {
-            // 선택된 기록의 지도 업데이트
-            updateMapForRecord(record);
-        });
-        GoogleSignInUtils.setupRecyclerView(recordRecyclerView, recordAdapter, this);
+        if (recordAdapter == null) {
+            recordAdapter = new RunningRecordAdapter(records, record -> {
+                // 선택된 기록의 지도 업데이트
+                selectedRecord = record;
+                updateMapForRecord(record);
+            });
+            recordAdapter.setOnItemLongClickListener(record -> {
+                // 길게 누르면 삭제/수정 다이얼로그 표시
+                showRunRecordOptionsDialog(record);
+            });
+            GoogleSignInUtils.setupRecyclerView(recordRecyclerView, recordAdapter, this);
+        } else {
+            // 어댑터가 이미 있으면 데이터만 업데이트
+            recordAdapter.notifyDataSetChanged();
+        }
+    }
+
+    private int findInsertPosition(RunningRecord newRecord) {
+        // startTime 기준으로 내림차순 정렬된 위치 찾기
+        for (int i = 0; i < records.size(); i++) {
+            if (newRecord.getCreatedAt() > records.get(i).getCreatedAt()) {
+                return i;
+            }
+        }
+        return records.size();
     }
 
     private void setupMap() {
@@ -430,6 +596,161 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
         return String.format(Locale.getDefault(), "%s %.6f, %s %.6f", 
                 latDirection, Math.abs(latitude), 
                 lngDirection, Math.abs(longitude));
+    }
+
+    private void showRunRecordOptionsDialog(RunningRecord record) {
+        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        if (currentUser == null) {
+            GoogleSignInUtils.showToast(this, "로그인이 필요합니다.");
+            return;
+        }
+
+        String userId = currentUser.getUid();
+        String documentId = record.getId();
+
+        new AlertDialog.Builder(this)
+                .setTitle("기록 관리")
+                .setMessage(String.format("거리: %s\n시간: %s\n페이스: %s", 
+                        record.getDistanceFormatted(), 
+                        record.getTimeFormatted(), 
+                        record.getPaceFormatted()))
+                .setItems(new String[]{"수정", "삭제"}, (dialog, which) -> {
+                    if (which == 0) {
+                        // 수정
+                        showEditRunRecordDialog(documentId, userId, record);
+                    } else if (which == 1) {
+                        // 삭제
+                        showDeleteConfirmDialog(documentId, userId);
+                    }
+                })
+                .setNegativeButton("취소", null)
+                .show();
+    }
+
+    private void showEditRunRecordDialog(String documentId, String userId, RunningRecord record) {
+        // 간단한 수정 다이얼로그 (거리와 시간만 수정 가능)
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        builder.setTitle("기록 수정");
+
+        // 커스텀 레이아웃 생성
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(50, 40, 50, 10);
+
+        // 거리 입력
+        android.widget.TextView distanceLabel = new android.widget.TextView(this);
+        distanceLabel.setText("거리 (km):");
+        distanceLabel.setTextSize(14);
+        layout.addView(distanceLabel);
+
+        android.widget.EditText distanceEdit = new android.widget.EditText(this);
+        distanceEdit.setText(String.format("%.2f", record.getTotalDistanceKm()));
+        distanceEdit.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        layout.addView(distanceEdit);
+
+        // 시간 입력 (분:초)
+        android.widget.TextView timeLabel = new android.widget.TextView(this);
+        timeLabel.setText("시간 (분:초):");
+        timeLabel.setTextSize(14);
+        timeLabel.setPadding(0, 20, 0, 0);
+        layout.addView(timeLabel);
+
+        android.widget.EditText timeEdit = new android.widget.EditText(this);
+        long totalSeconds = record.getElapsedTimeMs() / 1000;
+        long minutes = totalSeconds / 60;
+        long seconds = totalSeconds % 60;
+        timeEdit.setText(String.format("%d:%02d", minutes, seconds));
+        layout.addView(timeEdit);
+
+        builder.setView(layout);
+
+        builder.setPositiveButton("저장", (dialog, which) -> {
+            try {
+                // 거리 파싱
+                String distanceStr = distanceEdit.getText().toString().trim();
+                double distanceKm = Double.parseDouble(distanceStr);
+                double distanceMeters = distanceKm * 1000.0;
+
+                // 시간 파싱 (분:초 형식)
+                String timeStr = timeEdit.getText().toString().trim();
+                String[] timeParts = timeStr.split(":");
+                long totalSecondsNew = 0;
+                if (timeParts.length == 2) {
+                    long minutesNew = Long.parseLong(timeParts[0]);
+                    long secondsNew = Long.parseLong(timeParts[1]);
+                    totalSecondsNew = minutesNew * 60 + secondsNew;
+                } else {
+                    // 분만 입력한 경우
+                    totalSecondsNew = Long.parseLong(timeStr) * 60;
+                }
+
+                // 평균 페이스 계산
+                double averagePaceSeconds = 0;
+                if (distanceKm > 0) {
+                    averagePaceSeconds = totalSecondsNew / distanceKm;
+                }
+
+                // Firestore 업데이트
+                java.util.Map<String, Object> updates = new java.util.HashMap<>();
+                updates.put("totalDistance", distanceMeters);
+                updates.put("totalTime", totalSecondsNew);
+                updates.put("averagePace", averagePaceSeconds);
+
+                firestore.collection("users")
+                        .document(userId)
+                        .collection("runs")
+                        .document(documentId)
+                        .update(updates)
+                        .addOnSuccessListener(aVoid -> {
+                            GoogleSignInUtils.showToast(this, "기록이 수정되었습니다.");
+                            Log.d("RunningRecordActivity", "기록 수정 성공: " + documentId);
+                            // 실시간 리스너가 자동으로 UI 업데이트
+                        })
+                        .addOnFailureListener(e -> {
+                            GoogleSignInUtils.showToast(this, "기록 수정에 실패했습니다: " + e.getMessage());
+                            Log.e("RunningRecordActivity", "기록 수정 실패", e);
+                        });
+            } catch (NumberFormatException e) {
+                GoogleSignInUtils.showToast(this, "올바른 형식으로 입력해주세요.");
+            }
+        });
+
+        builder.setNegativeButton("취소", null);
+        builder.show();
+    }
+
+    private void showDeleteConfirmDialog(String documentId, String userId) {
+        new AlertDialog.Builder(this)
+                .setTitle("기록 삭제")
+                .setMessage("이 기록을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.")
+                .setPositiveButton("삭제", (dialog, which) -> {
+                    firestore.collection("users")
+                            .document(userId)
+                            .collection("runs")
+                            .document(documentId)
+                            .delete()
+                            .addOnSuccessListener(aVoid -> {
+                                GoogleSignInUtils.showToast(this, "기록이 삭제되었습니다.");
+                                Log.d("RunningRecordActivity", "기록 삭제 성공: " + documentId);
+                                // 실시간 리스너가 자동으로 UI 업데이트
+                            })
+                            .addOnFailureListener(e -> {
+                                GoogleSignInUtils.showToast(this, "기록 삭제에 실패했습니다: " + e.getMessage());
+                                Log.e("RunningRecordActivity", "기록 삭제 실패", e);
+                            });
+                })
+                .setNegativeButton("취소", null)
+                .show();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // 리스너 제거
+        if (runsListener != null) {
+            runsListener.remove();
+            runsListener = null;
+        }
     }
 }
 

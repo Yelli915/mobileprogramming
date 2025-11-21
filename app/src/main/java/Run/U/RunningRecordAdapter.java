@@ -12,14 +12,23 @@ public class RunningRecordAdapter extends RecyclerView.Adapter<RunningRecordAdap
 
     private List<RunningRecord> records;
     private OnItemClickListener onItemClick;
+    private OnItemLongClickListener onItemLongClick;
 
     public interface OnItemClickListener {
         void onItemClick(RunningRecord record);
     }
 
+    public interface OnItemLongClickListener {
+        void onItemLongClick(RunningRecord record);
+    }
+
     public RunningRecordAdapter(List<RunningRecord> records, OnItemClickListener onItemClick) {
         this.records = records;
         this.onItemClick = onItemClick;
+    }
+
+    public void setOnItemLongClickListener(OnItemLongClickListener listener) {
+        this.onItemLongClick = listener;
     }
 
     static class RecordViewHolder extends RecyclerView.ViewHolder {
@@ -63,6 +72,13 @@ public class RunningRecordAdapter extends RecyclerView.Adapter<RunningRecordAdap
             if (onItemClick != null) {
                 onItemClick.onItemClick(record);
             }
+        });
+        holder.itemView.setOnLongClickListener(v -> {
+            if (onItemLongClick != null) {
+                onItemLongClick.onItemLongClick(record);
+                return true;
+            }
+            return false;
         });
     }
 

@@ -24,6 +24,8 @@ import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.firebase.firestore.ListenerRegistration;
+import com.google.firebase.firestore.DocumentChange;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -53,6 +55,7 @@ public class SketchRunActivity extends AppCompatActivity implements OnMapReadyCa
     private GoogleMap map;
     private SupportMapFragment mapFragment;
     private Polyline coursePolyline;
+    private ListenerRegistration coursesListener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -118,38 +121,104 @@ public class SketchRunActivity extends AppCompatActivity implements OnMapReadyCa
     }
 
     private void loadCoursesFromFirestore() {
-        firestore.collection("courses")
-                .get()
-                .addOnCompleteListener(task -> {
-                    if (task.isSuccessful()) {
-                        allCourses.clear();
-                        for (QueryDocumentSnapshot document : task.getResult()) {
-                            Course course = documentToCourse(document);
-                            if (course != null) {
-                                allCourses.add(course);
-                            }
-                        }
-                        
-                        // 추천 코스: 랜덤 3개 선택
-                        List<Course> recommendedCourses = getRandomCourses(3);
-                        filteredCourses.clear();
-                        filteredCourses.addAll(recommendedCourses);
-                        setupRecyclerView();
+        // 기존 리스너 제거
+        if (coursesListener != null) {
+            coursesListener.remove();
+        }
 
-                        if (!filteredCourses.isEmpty()) {
-                            selectedCourse = filteredCourses.get(0);
-                            updateCourseInfo(filteredCourses.get(0));
-                            if (map != null) {
-                                displayCoursePathOnMap(selectedCourse);
+        // 실시간 리스너 등록
+        coursesListener = firestore.collection("courses")
+                .addSnapshotListener((snapshot, e) -> {
+                    if (e != null) {
+                        Log.w("SketchRunActivity", "코스 리스너 오류", e);
+                        return;
+                    }
+
+                    if (snapshot != null) {
+                        // 변경사항 처리
+                        for (DocumentChange dc : snapshot.getDocumentChanges()) {
+                            QueryDocumentSnapshot document = dc.getDocument();
+                            Course course = documentToCourse(document);
+                            
+                            if (course == null) {
+                                continue;
                             }
-                        } else {
-                            GoogleSignInUtils.showToast(this, "등록된 코스가 없습니다.");
+
+                            switch (dc.getType()) {
+                                case ADDED:
+                                    // 코스 추가
+                                    allCourses.add(course);
+                                    Log.d("SketchRunActivity", "코스 추가됨: " + course.getName());
+                                    break;
+                                case MODIFIED:
+                                    // 코스 수정
+                                    for (int i = 0; i < allCourses.size(); i++) {
+                                        if (allCourses.get(i).getId().equals(course.getId())) {
+                                            allCourses.set(i, course);
+                                            Log.d("SketchRunActivity", "코스 수정됨: " + course.getName());
+                                            
+                                            // 현재 선택된 코스가 수정된 경우 업데이트
+                                            if (selectedCourse != null && selectedCourse.getId().equals(course.getId())) {
+                                                selectedCourse = course;
+                                                updateCourseInfo(course);
+                                                if (map != null) {
+                                                    displayCoursePathOnMap(course);
+                                                }
+                                            }
+                                            break;
+                                        }
+                                    }
+                                    break;
+                                case REMOVED:
+                                    // 코스 삭제
+                                    allCourses.removeIf(c -> c.getId().equals(course.getId()));
+                                    Log.d("SketchRunActivity", "코스 삭제됨: " + course.getName());
+                                    
+                                    // 현재 선택된 코스가 삭제된 경우
+                                    if (selectedCourse != null && selectedCourse.getId().equals(course.getId())) {
+                                        selectedCourse = null;
+                                        tvCourseTotalDistance.setText("--");
+                                        tvCourseEstimatedTime.setText("--");
+                                        tvDifficulty.setText("--");
+                                        if (map != null) {
+                                            map.clear();
+                                        }
+                                    }
+                                    break;
+                            }
                         }
-                    } else {
-                        Log.w("SketchRunActivity", "코스 로드 실패", task.getException());
-                        GoogleSignInUtils.showToast(this, "코스를 불러오는데 실패했습니다.");
+
+                        // 추천 코스 업데이트
+                        updateRecommendedCourses();
                     }
                 });
+    }
+
+    private void updateRecommendedCourses() {
+        // 추천 코스: 랜덤 3개 선택
+        List<Course> recommendedCourses = getRandomCourses(3);
+        filteredCourses.clear();
+        filteredCourses.addAll(recommendedCourses);
+        setupRecyclerView();
+
+        if (!filteredCourses.isEmpty()) {
+            // 현재 선택된 코스가 필터링된 목록에 없으면 첫 번째 코스 선택
+            if (selectedCourse == null || !filteredCourses.contains(selectedCourse)) {
+                selectedCourse = filteredCourses.get(0);
+                updateCourseInfo(selectedCourse);
+                if (map != null) {
+                    displayCoursePathOnMap(selectedCourse);
+                }
+            }
+        } else {
+            selectedCourse = null;
+            tvCourseTotalDistance.setText("--");
+            tvCourseEstimatedTime.setText("--");
+            tvDifficulty.setText("--");
+            if (map != null) {
+                map.clear();
+            }
+        }
     }
     
     private List<Course> getRandomCourses(int count) {
@@ -363,6 +432,16 @@ public class SketchRunActivity extends AppCompatActivity implements OnMapReadyCa
         btnConfirm.setOnClickListener(v -> dialog.dismiss());
         
         dialog.show();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // 리스너 제거
+        if (coursesListener != null) {
+            coursesListener.remove();
+            coursesListener = null;
+        }
     }
 
     @Override
