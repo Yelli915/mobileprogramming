@@ -11,15 +11,6 @@
         android:id="@+id/header_back"
         layout="@layout/layout_header_back" />
 
-    <!-- Map Fragment -->
-    <fragment
-        android:id="@+id/mapFragment"
-        android:name="com.google.android.gms.maps.SupportMapFragment"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_margin="16dp" />
-
     <!-- Real-time Record Section -->
     <LinearLayout
         android:layout_width="match_parent"
@@ -165,33 +156,118 @@
 
     </LinearLayout>
 
+    <!-- Map Fragment -->
+    <fragment
+        android:id="@+id/mapFragment"
+        android:name="com.google.android.gms.maps.SupportMapFragment"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_margin="16dp" />
+
     <!-- Action Buttons -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp"
+        android:padding="20dp"
         android:background="@android:color/white">
 
-        <Button
-            android:id="@+id/pauseButton"
-            style="@style/ButtonSecondary"
-            android:text="일시 정지"
-            android:layout_marginBottom="12dp"
-            android:enabled="false" />
+        <!-- 러닝 시작 버튼 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/startRunningButton"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:text="러닝 시작"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textAllCaps="false"
+            app:cornerRadius="32dp"
+            app:backgroundTint="#FF6B35"
+            app:elevation="8dp"
+            app:icon="@android:drawable/ic_media_play"
+            app:iconGravity="textStart"
+            app:iconTint="#FFFFFF"
+            android:paddingVertical="16dp"
+            android:layout_marginBottom="16dp"
+            android:visibility="visible" />
 
-        <Button
-            android:id="@+id/endRunButton"
-            style="@style/ButtonSecondary"
-            android:text="러닝 종료"
-            android:layout_marginBottom="12dp" />
 
-        <Button
-            android:id="@+id/startTimerButton"
-            style="@style/ButtonPrimary"
-            android:text="타이머 시작" />
+        <!-- 일시 정지 + 러닝 종료 버튼 (가로 정렬) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:weightSum="2">
+
+            <!-- 재개 버튼 -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/resumeButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="64dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:text="재개"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textAllCaps="false"
+                app:cornerRadius="32dp"
+                app:backgroundTint="#28A745"
+                app:elevation="8dp"
+                app:icon="@android:drawable/ic_media_play"
+                app:iconGravity="textStart"
+                app:iconTint="#FFFFFF"
+                android:paddingVertical="16dp"
+                android:visibility="gone"/>
+
+            <!-- 일시 정지 버튼 -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/pauseButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="64dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:text="일시 정지"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textAllCaps="false"
+                app:cornerRadius="32dp"
+                app:strokeColor="#FF6B35"
+                app:strokeWidth="3dp"
+                app:iconGravity="textStart"
+                app:iconTint="#FF6B35"
+                android:textColor="#FF6B35"
+                android:paddingVertical="16dp"
+                android:visibility="gone" />
+
+            <!-- 러닝 종료 버튼 -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/endRunButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="64dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="러닝 종료"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textAllCaps="false"
+                app:cornerRadius="32dp"
+                app:strokeColor="#DC3545"
+                app:strokeWidth="3dp"
+                app:iconGravity="textStart"
+                app:iconTint="#DC3545"
+                android:textColor="#DC3545"
+                android:paddingVertical="16dp"
+                android:visibility="gone" />
+
+        </LinearLayout>
 
     </LinearLayout>
 
-</LinearLayout>
 
+
+</LinearLayout>

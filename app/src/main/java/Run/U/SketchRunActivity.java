@@ -3,14 +3,15 @@ package Run.U;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
-import android.widget.Button;
-import android.widget.ImageButton;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import com.google.android.material.appbar.MaterialToolbar;
+import com.google.android.material.button.MaterialButton;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
-import com.google.firebase.firestore.QuerySnapshot;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,10 +19,10 @@ public class SketchRunActivity extends AppCompatActivity {
 
     private RecyclerView recyclerViewCourses;
     private CourseAdapter courseAdapter;
-    private ImageButton backButton;
-    private Button btnCourseDetail;
-    private Button btnFindLocation;
-    private Button btnStartRun;
+    private MaterialToolbar toolbar;
+    private MaterialButton btnCourseDetail;
+    private FloatingActionButton btnFindLocation;
+    private MaterialButton btnStartRun;
     private TextView tvCourseTotalDistance;
     private TextView tvCourseEstimatedTime;
     private TextView tvDifficulty;
@@ -37,6 +38,7 @@ public class SketchRunActivity extends AppCompatActivity {
 
         initViews();
         initFirestore();
+        setupToolbar();
         loadCoursesFromFirestore();
         setupClickListeners();
     }
@@ -46,14 +48,31 @@ public class SketchRunActivity extends AppCompatActivity {
     }
 
     private void initViews() {
+        // MaterialToolbar 초기화
+        toolbar = findViewById(R.id.toolbar);
+
+        // RecyclerView 초기화
         recyclerViewCourses = findViewById(R.id.recyclerViewCourses);
-        backButton = findViewById(R.id.backButton);
+
+        // Material3 버튼들 초기화
         btnCourseDetail = findViewById(R.id.btnCourseDetail);
-        btnFindLocation = findViewById(R.id.btnFindLocation);
         btnStartRun = findViewById(R.id.btnStartRun);
+
+        // 코스 정보 TextView 초기화
         tvCourseTotalDistance = findViewById(R.id.tvCourseTotalDistance);
         tvCourseEstimatedTime = findViewById(R.id.tvCourseEstimatedTime);
         tvDifficulty = findViewById(R.id.tvDifficulty);
+    }
+
+    private void setupToolbar() {
+        setSupportActionBar(toolbar);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+            getSupportActionBar().setDisplayShowHomeEnabled(true);
+        }
+
+        // 뒤로가기 버튼 클릭 리스너
+        toolbar.setNavigationOnClickListener(v -> finish());
     }
 
     private void loadCoursesFromFirestore() {
@@ -69,7 +88,7 @@ public class SketchRunActivity extends AppCompatActivity {
                             }
                         }
                         setupRecyclerView();
-                        
+
                         if (!courses.isEmpty()) {
                             selectedCourse = courses.get(0);
                             updateCourseInfo(courses.get(0));
@@ -87,7 +106,7 @@ public class SketchRunActivity extends AppCompatActivity {
         try {
             Course course = new Course();
             course.setId(document.getId());
-            
+
             if (document.contains("name")) {
                 course.setName(document.getString("name"));
             }
@@ -124,7 +143,7 @@ public class SketchRunActivity extends AppCompatActivity {
                     course.setCreatedAt(((com.google.firebase.Timestamp) createdAt).toDate().getTime());
                 }
             }
-            
+
             return course;
         } catch (Exception e) {
             Log.e("SketchRunActivity", "코스 변환 실패", e);
@@ -138,7 +157,17 @@ public class SketchRunActivity extends AppCompatActivity {
             updateCourseInfo(course);
         });
 
-        GoogleSignInUtils.setupRecyclerView(recyclerViewCourses, courseAdapter, this);
+        // 수평 스크롤 RecyclerView 설정
+        LinearLayoutManager layoutManager = new LinearLayoutManager(
+                this,
+                LinearLayoutManager.HORIZONTAL,
+                false
+        );
+        recyclerViewCourses.setLayoutManager(layoutManager);
+        recyclerViewCourses.setAdapter(courseAdapter);
+
+        // 스크롤 성능 최적화
+        recyclerViewCourses.setHasFixedSize(true);
     }
 
     private void updateCourseInfo(Course course) {
@@ -148,22 +177,20 @@ public class SketchRunActivity extends AppCompatActivity {
     }
 
     private void setupClickListeners() {
-        backButton.setOnClickListener(v -> finish());
-
+        // 코스 상세 보기 버튼
         btnCourseDetail.setOnClickListener(v -> {
             if (selectedCourse != null) {
                 GoogleSignInUtils.showToast(this, selectedCourse.getName() + " 상세 정보");
-                // 코스 상세 화면으로 이동하는 로직 추가
+                // TODO: 코스 상세 화면으로 이동
+                // Intent intent = new Intent(this, CourseDetailActivity.class);
+                // intent.putExtra("course_id", selectedCourse.getId());
+                // startActivity(intent);
             } else {
                 showCourseNotSelectedMessage();
             }
         });
 
-        btnFindLocation.setOnClickListener(v -> {
-            Intent intent = new Intent(SketchRunActivity.this, RunningStartActivity.class);
-            startActivity(intent);
-        });
-
+        // 스케치 런 시작 버튼
         btnStartRun.setOnClickListener(v -> {
             if (selectedCourse != null) {
                 Intent intent = new Intent(SketchRunActivity.this, RunningStartActivity.class);
@@ -171,6 +198,7 @@ public class SketchRunActivity extends AppCompatActivity {
                 intent.putExtra("course_name", selectedCourse.getName());
                 intent.putExtra("course_distance", selectedCourse.getDistance());
                 intent.putExtra("course_difficulty", selectedCourse.getDifficulty());
+                intent.putExtra("course_path", selectedCourse.getPathEncoded());
                 startActivity(intent);
             } else {
                 showCourseNotSelectedMessage();
@@ -181,5 +209,10 @@ public class SketchRunActivity extends AppCompatActivity {
     private void showCourseNotSelectedMessage() {
         GoogleSignInUtils.showToast(this, "코스를 선택해주세요");
     }
-}
 
+    @Override
+    public boolean onSupportNavigateUp() {
+        finish();
+        return true;
+    }
+}

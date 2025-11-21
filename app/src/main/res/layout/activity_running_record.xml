@@ -33,7 +33,7 @@
                 android:textSize="14sp"
                 android:drawableTop="@android:drawable/ic_menu_today"
                 android:gravity="center"
-                android:background="@drawable/button_filter_background" />
+                android:backgroundTint="#FF6B35" />
 
             <Button
                 android:id="@+id/btn_route_filter"
@@ -46,7 +46,7 @@
                 android:textSize="14sp"
                 android:drawableTop="@android:drawable/ic_menu_myplaces"
                 android:gravity="center"
-                android:background="@drawable/button_filter_background" />
+                android:backgroundTint="#FF6B35" />
 
             <Button
                 android:id="@+id/btn_statistics"
@@ -58,7 +58,7 @@
                 android:textSize="14sp"
                 android:drawableTop="@android:drawable/ic_menu_sort_by_size"
                 android:gravity="center"
-                android:background="@drawable/button_filter_background" />
+                android:backgroundTint="#FF6B35" />
 
         </LinearLayout>
 
@@ -267,13 +267,13 @@
         <!-- 액션 버튼들 -->
         <Button
             android:id="@+id/btn_rate"
-            style="@style/ButtonSecondary"
+            style="@style/ButtonPrimary"
             android:text="별점 평가하기"
             android:layout_marginBottom="12dp" />
 
         <Button
             android:id="@+id/btn_share"
-            style="@style/ButtonSecondary"
+            style="@style/ButtonPrimary"
             android:text="공유하기"
             android:layout_marginBottom="12dp" />
 
