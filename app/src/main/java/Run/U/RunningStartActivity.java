@@ -38,6 +38,7 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.CancellationTokenSource;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -105,15 +106,13 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
     private Location lastLocation = null;
     private Handler locationUpdateHandler = new Handler(Looper.getMainLooper());
     private Runnable locationUpdateRunnable = null;
-    private float currentZoomLevel = 15f; // 현재 줌 레벨 저장
+    private float currentZoomLevel = 15f; // 현재 줌 레벨 저장 (15배율 고정)
 
     private List<LatLng> routePoints = new ArrayList<>();
     private Polyline routePolyline = null;
     
     // Map markers (재사용을 위한 멤버 변수)
-    private Marker currentLocationMarker = null;
     private Marker startLocationMarker = null;
-    private Marker defaultLocationMarker = null; // 기본 위치 마커 (광운대 새빛관)
 
     private double averagePace = 0.0;
     private double instantPace = 0.0;
@@ -177,16 +176,6 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
             return;
         }
 
-        View backButton = findViewById(R.id.backButton);
-        if (backButton != null) {
-            backButton.setOnClickListener(v -> {
-                if (isRunning) {
-                    showExitConfirmationDialog();
-                } else {
-                    finish();
-                }
-            });
-        }
 
         handleCourseIntent();
 
@@ -203,15 +192,16 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
-        // Initialize LocationRequest
+        // Initialize LocationRequest - 실시간 GPS 우선
         locationRequest = new LocationRequest.Builder(
                 Priority.PRIORITY_HIGH_ACCURACY,
-                2000L
+                1000L  // 1초마다 업데이트
         )
-                .setMinUpdateIntervalMillis(1000L)
-                .setGranularity(Granularity.GRANULARITY_PERMISSION_LEVEL)
-                .setWaitForAccurateLocation(false)
-                .setMaxUpdateDelayMillis(5000L)
+                .setMinUpdateIntervalMillis(500L)  // 최소 0.5초 간격
+                .setGranularity(Granularity.GRANULARITY_FINE)  // 정밀 위치
+                .setWaitForAccurateLocation(true)  // 정확한 위치 대기
+                .setMaxUpdateDelayMillis(2000L)  // 최대 2초 지연
+                .setMinUpdateDistanceMeters(0f)  // 거리 제한 없음
                 .build();
 
         // Initialize LocationCallback
@@ -240,7 +230,9 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                         }
 
                         lastLocation = location;
-                        Log.d("RunningStartActivity", "유효한 GPS 위치 수신: " + formatLocation(location.getLatitude(), location.getLongitude()) + " (정확도: " + location.getAccuracy() + "m, 나이: " + (System.currentTimeMillis() - location.getTime()) / 1000 + "초 전)");
+                        long locationAge = (System.currentTimeMillis() - location.getTime()) / 1000;
+                        Log.d("RunningStartActivity", "✅ 실시간 GPS 위치 수신: " + formatLocation(location.getLatitude(), location.getLongitude()) + 
+                            " (정확도: " + String.format("%.1f", location.getAccuracy()) + "m, 나이: " + locationAge + "초)");
                     } else {
                         // 유효하지 않은 위치는 무시하고 다음 업데이트 대기
                         // 상세한 무시 이유를 로그에 남김
@@ -566,36 +558,31 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         Log.d("RunningStartActivity", "onMapReady() 호출됨 - 지도 초기화 시작");
         map = googleMap;
 
-        // 기본 위치를 광운대 새빛관으로 설정
-        LatLng kwUnivSaebitHall = new LatLng(37.6236, 127.0615); // 광운대학교 새빛관 좌표
+        // 지도 설정 - 15배율로 고정
         currentZoomLevel = 15f;
-        map.moveCamera(CameraUpdateFactory.newLatLngZoom(kwUnivSaebitHall, currentZoomLevel));
-        Log.d("RunningStartActivity", "기본 위치(광운대 새빛관)로 카메라 이동 완료: " + formatLocation(37.6236, 127.0615));
         
-        // 광운대 새빛관 마커 추가 (기본 위치, GPS 위치 수신 시 제거됨)
-        defaultLocationMarker = map.addMarker(new MarkerOptions()
-                .position(kwUnivSaebitHall)
-                .title("광운대 새빛관")
-                .snippet("기본 위치 - GPS 위치 수신 중..."));
-        Log.d("RunningStartActivity", "기본 위치 마커 추가 완료");
- 
         // Enable my location button if permission granted
         if (checkLocationPermission()) {
             try {
                 map.setMyLocationEnabled(true);
                 map.getUiSettings().setMyLocationButtonEnabled(true);
                 Log.d("RunningStartActivity", "내 위치 버튼 활성화 완료");
-                getCurrentLocation();
+                
+                // 1순위: 화면 진입 시 최초 위치 즉시 표시 (현재 위치 버튼 누르지 않아도)
+                Log.d("RunningStartActivity", "1순위: 최초 위치 즉시 표시 시작");
+                getCurrentLocationRealtime();
+                
+                // 실시간 GPS 업데이트 시작 (지속적, 버튼 클릭 전에도 위치 수신 대기)
+                requestLocationUpdates();
             } catch (SecurityException e) {
                 Log.e("RunningStartActivity", "내 위치 활성화 실패", e);
                 e.printStackTrace();
             }
         } else {
-            // 권한이 없어도 기본 위치(광운대 새빛관)는 표시됨
-            Log.w("RunningStartActivity", "위치 권한 없음 - 기본 위치(광운대 새빛관)만 표시");
+            Log.w("RunningStartActivity", "위치 권한 없음 - 권한 요청 필요");
         }
     }
-
+    
     private boolean checkLocationPermission() {
         return ContextCompat.checkSelfPermission(
                 this,
@@ -621,11 +608,13 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                     try {
                         map.setMyLocationEnabled(true);
                         map.getUiSettings().setMyLocationButtonEnabled(true);
+                        Log.d("RunningStartActivity", "위치 권한 승인 - 최초 위치 가져오기 시작");
+                        // 권한 승인 후 최초 위치 즉시 표시
+                        getCurrentLocationRealtime();
                     } catch (SecurityException e) {
                         e.printStackTrace();
                     }
                 }
-                getCurrentLocation();
                 requestLocationUpdates();
             } else {
                 GoogleSignInUtils.showToast(this, "위치 권한이 필요합니다.");
@@ -635,43 +624,133 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
     }
 
     @SuppressLint("MissingPermission")
-    private void getCurrentLocation() {
+    private void getCurrentLocationRealtime() {
         if (!checkLocationPermission()) {
+            Log.w("RunningStartActivity", "위치 권한이 없습니다. 권한을 요청합니다.");
+            requestLocationPermission();
             return;
         }
+        
+        if (map == null) {
+            Log.w("RunningStartActivity", "지도가 아직 준비되지 않았습니다.");
+            return;
+        }
+        
+        Log.d("RunningStartActivity", "1순위: 최초 위치 빠른 표시 시작");
+        
+        // 1단계: 캐시된 위치를 먼저 빠르게 가져와서 즉시 표시 (개선된 속도)
         try {
-            fusedLocationClient.getLastLocation().addOnSuccessListener(new OnSuccessListener<Location>() {
-                @Override
-                public void onSuccess(Location location) {
-                    if (location != null && map != null) {
-                        // 위치 유효성 검증
-                        if (isValidLocation(location)) {
-                            LatLng currentLatLng = new LatLng(location.getLatitude(), location.getLongitude());
-                            // GPS 위치가 유효하면 기본 위치 마커(광운대 새빛관) 제거
-                            if (defaultLocationMarker != null) {
-                                defaultLocationMarker.remove();
-                                defaultLocationMarker = null;
-                            }
-                            // GPS 위치가 유효하면 현재 위치로 카메라 이동
-                            // (기본 위치 광운대 새빛관에서 현재 위치로 전환)
-                            currentZoomLevel = 15f;
-                            map.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, currentZoomLevel));
-                            lastLocation = location;
-                            Log.d("RunningStartActivity", "현재 GPS 위치로 전환: " + formatLocation(location.getLatitude(), location.getLongitude()) + " (정확도: " + location.getAccuracy() + "m)");
-                        } else {
-                            // GPS 위치가 유효하지 않으면 기본 위치(광운대 새빛관) 유지
-                            Log.d("RunningStartActivity", "초기 GPS 위치가 유효하지 않습니다. 기본 위치(광운대 새빛관) 유지. 실시간 GPS 업데이트를 기다리는 중...");
-                        }
-                    } else {
-                        // GPS 위치를 가져올 수 없으면 기본 위치(광운대 새빛관) 유지
-                        Log.d("RunningStartActivity", "초기 GPS 위치를 가져올 수 없습니다. 기본 위치(광운대 새빛관) 유지. 실시간 GPS 업데이트를 기다리는 중...");
+            fusedLocationClient.getLastLocation().addOnSuccessListener(cachedLocation -> {
+                if (cachedLocation != null && map != null) {
+                    long locationAge = System.currentTimeMillis() - cachedLocation.getTime();
+                    
+                    // 캐시된 위치가 1분 이내이고 유효하면 즉시 표시
+                    if (locationAge < 60000 && isValidLocation(cachedLocation)) {
+                        LatLng currentLatLng = new LatLng(cachedLocation.getLatitude(), cachedLocation.getLongitude());
+                        currentZoomLevel = 15f;
+                        map.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, currentZoomLevel));
+                        lastLocation = cachedLocation;
+                        
+                        Log.d("RunningStartActivity", "✅ 캐시 위치로 즉시 표시 완료 (15배율): " + 
+                            formatLocation(cachedLocation.getLatitude(), cachedLocation.getLongitude()) + 
+                            " (정확도: " + cachedLocation.getAccuracy() + "m, 나이: " + (locationAge / 1000) + "초)");
                     }
                 }
+                
+                // 2단계: 동시에 정확한 GPS 위치 요청 (캐시 표시와 병렬, 빠른 업데이트)
+                requestAccurateLocation();
+            }).addOnFailureListener(e -> {
+                Log.w("RunningStartActivity", "캐시 위치 가져오기 실패, 정확한 위치 요청으로 진행", e);
+                requestAccurateLocation();
             });
         } catch (SecurityException e) {
             Log.e("RunningStartActivity", "위치 권한 오류", e);
-            e.printStackTrace();
+            requestAccurateLocation();
         }
+    }
+    
+    @SuppressLint("MissingPermission")
+    private void requestAccurateLocation() {
+        if (!checkLocationPermission() || map == null) {
+            return;
+        }
+        
+        try {
+            // 빠른 응답을 위해 BALANCED_POWER_ACCURACY로 먼저 시도
+            com.google.android.gms.tasks.CancellationTokenSource cancellationTokenSource = 
+                new com.google.android.gms.tasks.CancellationTokenSource();
+            
+            fusedLocationClient.getCurrentLocation(
+                Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                cancellationTokenSource.getToken()
+            ).addOnSuccessListener(location -> {
+                if (location != null && map != null) {
+                    long locationAge = System.currentTimeMillis() - location.getTime();
+                    
+                    if (isValidLocation(location) || (locationAge < 10000 && location.getAccuracy() < 100)) {
+                        LatLng currentLatLng = new LatLng(location.getLatitude(), location.getLongitude());
+                        currentZoomLevel = 15f;
+                        map.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, currentZoomLevel));
+                        lastLocation = location;
+                        
+                        Log.d("RunningStartActivity", "✅ 빠른 위치 업데이트 완료 (15배율): " + 
+                            formatLocation(location.getLatitude(), location.getLongitude()) + 
+                            " (정확도: " + location.getAccuracy() + "m)");
+                    } else {
+                        // 정확도가 낮으면 HIGH_ACCURACY로 재시도
+                        requestHighAccuracyLocation();
+                    }
+                }
+            }).addOnFailureListener(e -> {
+                // BALANCED 실패 시 HIGH_ACCURACY로 재시도
+                Log.d("RunningStartActivity", "BALANCED 위치 실패, HIGH_ACCURACY로 재시도", e);
+                requestHighAccuracyLocation();
+            });
+        } catch (SecurityException e) {
+            Log.e("RunningStartActivity", "위치 권한 오류", e);
+            requestHighAccuracyLocation();
+        }
+    }
+    
+    @SuppressLint("MissingPermission")
+    private void requestHighAccuracyLocation() {
+        if (!checkLocationPermission() || map == null) {
+            return;
+        }
+        
+        try {
+            com.google.android.gms.tasks.CancellationTokenSource cancellationTokenSource = 
+                new com.google.android.gms.tasks.CancellationTokenSource();
+            
+            fusedLocationClient.getCurrentLocation(
+                Priority.PRIORITY_HIGH_ACCURACY,
+                cancellationTokenSource.getToken()
+            ).addOnSuccessListener(location -> {
+                if (location != null && map != null) {
+                    if (isValidLocation(location)) {
+                        LatLng currentLatLng = new LatLng(location.getLatitude(), location.getLongitude());
+                        currentZoomLevel = 15f;
+                        map.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, currentZoomLevel));
+                        lastLocation = location;
+                        
+                        Log.d("RunningStartActivity", "✅ 고정밀 위치 업데이트 완료 (15배율): " + 
+                            formatLocation(location.getLatitude(), location.getLongitude()) + 
+                            " (정확도: " + location.getAccuracy() + "m)");
+                    }
+                }
+            }).addOnFailureListener(e -> {
+                Log.e("RunningStartActivity", "고정밀 위치 수신 실패", e);
+                // 실패해도 locationCallback에서 업데이트될 예정
+            });
+        } catch (SecurityException e) {
+            Log.e("RunningStartActivity", "위치 권한 오류", e);
+        }
+    }
+    
+    
+    @SuppressLint("MissingPermission")
+    private void getCurrentLocation() {
+        getCurrentLocationRealtime();
     }
 
     @SuppressLint("MissingPermission")
@@ -682,16 +761,35 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         }
 
         try {
+            // 기존 업데이트가 있다면 제거 후 재시작 (중복 방지)
+            stopLocationUpdates();
+            
             fusedLocationClient.requestLocationUpdates(
                     locationRequest,
                     locationCallback,
                     Looper.getMainLooper()
             );
-            Log.d("RunningStartActivity", "실시간 GPS 위치 업데이트 시작됨 (2초 간격, 고정밀도 모드)");
-            Log.d("RunningStartActivity", "지도 상태 - map 객체: " + (map != null ? "초기화됨" : "null"));
+            Log.d("RunningStartActivity", "✅ 실시간 GPS 위치 업데이트 시작");
+            Log.d("RunningStartActivity", "   - 업데이트 간격: 1초");
+            Log.d("RunningStartActivity", "   - 최소 간격: 0.5초");
+            Log.d("RunningStartActivity", "   - 정밀도: 최고 정밀도 (FINE)");
+            Log.d("RunningStartActivity", "   - 정확한 위치 대기: 활성화");
+            Log.d("RunningStartActivity", "   - 지도 상태: " + (map != null ? "초기화됨" : "null"));
         } catch (SecurityException e) {
-            Log.e("RunningStartActivity", "위치 업데이트 요청 실패", e);
+            Log.e("RunningStartActivity", "❌ 위치 업데이트 요청 실패", e);
             e.printStackTrace();
+        }
+    }
+    
+    // 위치 업데이트 중지
+    private void stopLocationUpdates() {
+        if (locationCallback != null && fusedLocationClient != null) {
+            try {
+                fusedLocationClient.removeLocationUpdates(locationCallback);
+                Log.d("RunningStartActivity", "기존 위치 업데이트 중지");
+            } catch (Exception e) {
+                Log.w("RunningStartActivity", "위치 업데이트 중지 실패", e);
+            }
         }
     }
 
@@ -700,38 +798,32 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
             return false;
         }
 
-        // 위치가 너무 오래된 경우 (5분 이상)
+        // 위치가 너무 오래된 경우 (10초 이상) - 캐시 방지 강화
         long locationAge = System.currentTimeMillis() - location.getTime();
-        if (locationAge > 5 * 60 * 1000) {
-            Log.w("RunningStartActivity", "위치가 너무 오래되었습니다: " + (locationAge / 1000) + "초 전");
+        if (locationAge > 10 * 1000) {
+            Log.w("RunningStartActivity", "위치가 너무 오래되었습니다: " + (locationAge / 1000) + "초 전 - 캐시된 위치일 가능성");
             return false;
         }
 
-        // 위치 정확도가 너무 낮은 경우 (100m 이상)
-        if (location.getAccuracy() > 100) {
+        // 위치 정확도가 너무 낮은 경우 (50m 이상)
+        if (location.getAccuracy() > 50) {
             Log.w("RunningStartActivity", "위치 정확도가 낮습니다: " + location.getAccuracy() + "m");
             return false;
         }
 
-        // 구글 본사 좌표 체크 (37.4219983, -122.084) - 일반적으로 잘못된 위치
-        // 단, 정확도가 높은 경우 (20m 이하)는 실제 GPS 신호이므로 허용
+        // 좌표 유효성 검증
         double lat = location.getLatitude();
         double lng = location.getLongitude();
-        if (location.getAccuracy() > 20) {
-            // 정확도가 낮을 때만 구글 본사 좌표 체크 수행
-            if (Math.abs(lat - 37.4219983) < 0.001 && Math.abs(lng - (-122.084)) < 0.001) {
-                Log.w("RunningStartActivity", "구글 본사 좌표 감지 - 위치가 유효하지 않습니다 (정확도: " + location.getAccuracy() + "m)");
-                return false;
-            }
-        } else {
-            // 정확도가 높은 경우 (20m 이하)는 실제 GPS 신호이므로 구글 본사 좌표여도 허용
-            // 실제로 구글 본사 근처에 있을 수도 있음
-            Log.d("RunningStartActivity", "위치 정확도가 높아 구글 본사 좌표 체크를 건너뜀: " + formatLocation(lat, lng) + " (정확도: " + location.getAccuracy() + "m)");
-        }
-
-        // 좌표가 0,0인 경우 (유효하지 않은 위치)
+        
+        // 좌표가 0,0인 경우
         if (lat == 0.0 && lng == 0.0) {
             Log.w("RunningStartActivity", "좌표가 (0,0)입니다 - 위치가 유효하지 않습니다");
+            return false;
+        }
+        
+        // 한국 범위 밖인 경우 (위도 33-43, 경도 124-132)
+        if (lat < 33.0 || lat > 43.0 || lng < 124.0 || lng > 132.0) {
+            Log.w("RunningStartActivity", "한국 범위 밖의 좌표입니다: " + formatLocation(lat, lng) + " - 캐시된 위치일 가능성");
             return false;
         }
 
@@ -756,22 +848,9 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
             return false;
         }
 
-        // 구글 본사 좌표 체크 (러닝 중에는 정확도 기준 완화)
-        // 단, 정확도가 높은 경우 (50m 이하)는 실제 GPS 신호이므로 허용
+        // 좌표가 0,0인 경우
         double lat = location.getLatitude();
         double lng = location.getLongitude();
-        if (location.getAccuracy() > 50) {
-            // 정확도가 낮을 때만 구글 본사 좌표 체크 수행
-            if (Math.abs(lat - 37.4219983) < 0.001 && Math.abs(lng - (-122.084)) < 0.001) {
-                Log.w("RunningStartActivity", "구글 본사 좌표 감지 - 위치가 유효하지 않습니다 (정확도: " + location.getAccuracy() + "m)");
-                return false;
-            }
-        } else {
-            // 정확도가 높은 경우 (50m 이하)는 실제 GPS 신호이므로 구글 본사 좌표여도 허용
-            Log.d("RunningStartActivity", "위치 정확도가 높아 구글 본사 좌표 체크를 건너뜀: " + formatLocation(lat, lng) + " (정확도: " + location.getAccuracy() + "m)");
-        }
-
-        // 좌표가 0,0인 경우
         if (lat == 0.0 && lng == 0.0) {
             Log.w("RunningStartActivity", "좌표가 (0,0)입니다 - 위치가 유효하지 않습니다");
             return false;
@@ -831,30 +910,11 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         LatLng currentLatLng = new LatLng(location.getLatitude(), location.getLongitude());
         String locationInfo = formatLocation(location.getLatitude(), location.getLongitude());
 
-        // 기본 위치 마커(광운대 새빛관)가 있으면 제거 (GPS 위치 수신 시)
-        if (defaultLocationMarker != null) {
-            defaultLocationMarker.remove();
-            defaultLocationMarker = null;
-        }
-
-        // 기존 마커 업데이트 (clear 대신 재사용)
-        if (currentLocationMarker != null) {
-            currentLocationMarker.setPosition(currentLatLng);
-            currentLocationMarker.setSnippet(locationInfo);
-        } else {
-            currentLocationMarker = map.addMarker(new MarkerOptions()
-                    .position(currentLatLng)
-                    .title("현재 위치")
-                    .snippet(locationInfo));
-        }
-
-        // 실시간으로 현재 위치를 따라가도록 카메라 업데이트 (줌 레벨 유지하며 부드럽게 이동)
-        if (map.getCameraPosition() != null) {
-            currentZoomLevel = map.getCameraPosition().zoom;
-        }
+        // 실시간으로 현재 위치를 따라가도록 카메라 업데이트 (15배율 고정, 마커 없이)
+        currentZoomLevel = 15f; // 항상 15배율 유지
         map.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, currentZoomLevel));
         
-        Log.d("RunningStartActivity", "지도 위치 업데이트: " + locationInfo + " (정확도: " + location.getAccuracy() + "m)");
+        Log.d("RunningStartActivity", "지도 위치 업데이트 (15배율): " + locationInfo + " (정확도: " + location.getAccuracy() + "m)");
     }
 
     private String formatLocation(double latitude, double longitude) {
@@ -920,22 +980,8 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                         .snippet(startLocationInfo));
             }
 
-            // 현재 위치 마커 업데이트 (재사용)
-            String currentLocationInfo = formatLocation(newLocation.getLatitude(), newLocation.getLongitude());
-            if (currentLocationMarker != null) {
-                currentLocationMarker.setPosition(currentLatLng);
-                currentLocationMarker.setSnippet(currentLocationInfo);
-            } else {
-                currentLocationMarker = map.addMarker(new MarkerOptions()
-                        .position(currentLatLng)
-                        .title("현재 위치")
-                        .snippet(currentLocationInfo));
-            }
-
-            // 실시간으로 현재 위치를 따라가도록 카메라 업데이트 (줌 레벨 유지하며 부드럽게 이동)
-            if (map.getCameraPosition() != null) {
-                currentZoomLevel = map.getCameraPosition().zoom;
-            }
+            // 실시간으로 현재 위치를 따라가도록 카메라 업데이트 (15배율 고정, 마커 없이)
+            currentZoomLevel = 15f; // 항상 15배율 유지
             map.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, currentZoomLevel));
         }
     }
@@ -943,6 +989,22 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
     private void startRunning() {
         if (!isRunning) {
             try {
+                // 1순위: 실시간 위치를 지도에 15배율로 표시
+                Log.d("RunningStartActivity", "일반 러닝 버튼 클릭 - 실시간 위치 표시 시작 (15배율)");
+                currentZoomLevel = 15f; // 15배율로 고정
+                
+                // 가장 먼저 현재 위치를 가져와서 지도에 표시
+                if (map != null && checkLocationPermission()) {
+                    getCurrentLocationRealtime();
+                } else if (!checkLocationPermission()) {
+                    requestLocationPermission();
+                    return;
+                } else {
+                    Log.w("RunningStartActivity", "지도가 아직 준비되지 않았습니다. 대기 중...");
+                    // 지도가 준비되지 않았으면 위치 업데이트만 시작
+                    requestLocationUpdates();
+                }
+                
                 isRunning = true;
                 isPaused = false;
                 startTime = System.currentTimeMillis();
@@ -952,10 +1014,6 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                 routePoints.clear(); // 경로 초기화
                 
                 // 기존 마커와 Polyline 제거
-                if (currentLocationMarker != null) {
-                    currentLocationMarker.remove();
-                    currentLocationMarker = null;
-                }
                 if (startLocationMarker != null) {
                     startLocationMarker.remove();
                     startLocationMarker = null;
@@ -976,7 +1034,6 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                 }
 
                 startTimer();
-                getCurrentLocation();
                 requestLocationUpdates();
 
                 // 시작 음성 안내
@@ -1156,15 +1213,6 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         }
     }
 
-    private void stopLocationUpdates() {
-        if (locationCallback != null) {
-            fusedLocationClient.removeLocationUpdates(locationCallback);
-            Log.d("RunningStartActivity", "위치 업데이트 중지됨");
-        }
-        if (locationUpdateRunnable != null) {
-            locationUpdateHandler.removeCallbacks(locationUpdateRunnable);
-        }
-    }
 
     private void handleCourseIntent() {
         Intent intent = getIntent();
@@ -1191,23 +1239,25 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // 화면이 다시 활성화될 때마다 최초 위치 표시
+        if (map != null && checkLocationPermission() && !isRunning) {
+            Log.d("RunningStartActivity", "onResume - 최초 위치 가져오기");
+            getCurrentLocationRealtime();
+        }
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
         stopTimer();
         stopLocationUpdates();
         
         // 마커와 Polyline 정리
-        if (currentLocationMarker != null) {
-            currentLocationMarker.remove();
-            currentLocationMarker = null;
-        }
         if (startLocationMarker != null) {
             startLocationMarker.remove();
             startLocationMarker = null;
-        }
-        if (defaultLocationMarker != null) {
-            defaultLocationMarker.remove();
-            defaultLocationMarker = null;
         }
         if (routePolyline != null) {
             routePolyline.remove();

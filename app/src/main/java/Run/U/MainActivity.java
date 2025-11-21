@@ -16,6 +16,7 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.material.button.MaterialButton;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -30,8 +31,9 @@ public class MainActivity extends AppCompatActivity {
 
     private FirebaseAuth firebaseAuth;
     private FirebaseFirestore firestore;
+    private GoogleSignInClient googleSignInClient;
     private TextView welcomeText;
-    private ImageButton settingsButton;
+    private ImageButton logoutButton;
     private MaterialButton startNormalRunButton;
     private MaterialButton startCourseRunButton;
 
@@ -57,10 +59,11 @@ public class MainActivity extends AppCompatActivity {
 
         firebaseAuth = GoogleSignInUtils.getAuth();
         firestore = GoogleSignInUtils.getFirestore();
+        googleSignInClient = GoogleSignInUtils.getGoogleSignInClient(this);
 
         // View 초기화
         welcomeText = findViewById(R.id.welcome_text);
-        settingsButton = findViewById(R.id.settings_button);
+        logoutButton = findViewById(R.id.logout_button);
         startNormalRunButton = findViewById(R.id.start_normal_run_button);
         startCourseRunButton = findViewById(R.id.start_course_run_button);
 
@@ -76,10 +79,7 @@ public class MainActivity extends AppCompatActivity {
         adminCourseButton = findViewById(R.id.admin_course_button);
 
         // 버튼 클릭 리스너
-        settingsButton.setOnClickListener(v -> {
-            Intent intent = new Intent(MainActivity.this, SettingsActivity.class);
-            startActivity(intent);
-        });
+        logoutButton.setOnClickListener(v -> showLogoutDialog());
 
         startNormalRunButton.setOnClickListener(v -> startNormalRun());
         startCourseRunButton.setOnClickListener(v -> startCourseSelection());
@@ -300,5 +300,24 @@ public class MainActivity extends AppCompatActivity {
     private void startCourseSelection() {
         Intent intent = new Intent(MainActivity.this, SketchRunActivity.class);
         startActivity(intent);
+    }
+
+    private void showLogoutDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.logout_dialog_title)
+                .setMessage(R.string.logout_dialog_message)
+                .setPositiveButton(R.string.confirm, (dialog, which) -> performLogout())
+                .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss())
+                .show();
+    }
+
+    private void performLogout() {
+        firebaseAuth.signOut();
+        googleSignInClient.signOut().addOnCompleteListener(this, task -> {
+            Intent intent = new Intent(MainActivity.this, LoginActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+        });
     }
 }
