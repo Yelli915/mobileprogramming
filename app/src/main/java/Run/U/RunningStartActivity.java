@@ -33,6 +33,7 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
@@ -121,6 +122,7 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
     private FirebaseFirestore firestore;
     private FirebaseAuth firebaseAuth;
     private String courseId;
+    private String coursePathEncoded;
 
     // TTS 관련 변수
     private TextToSpeech textToSpeech;
@@ -560,6 +562,11 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
 
         // 지도 설정 - 15배율로 고정
         currentZoomLevel = 15f;
+        
+        // 코스 경로가 있으면 지도에 표시
+        if (coursePathEncoded != null && !coursePathEncoded.isEmpty()) {
+            displayCoursePath();
+        }
         
         // Enable my location button if permission granted
         if (checkLocationPermission()) {
@@ -1250,6 +1257,52 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
             String courseName = intent.getStringExtra("course_name");
             double courseDistance = intent.getDoubleExtra("course_distance", 0.0);
             String courseDifficulty = intent.getStringExtra("course_difficulty");
+        }
+        
+        if (intent != null && intent.hasExtra("course_path")) {
+            coursePathEncoded = intent.getStringExtra("course_path");
+            Log.d("RunningStartActivity", "코스 경로 받음: " + (coursePathEncoded != null && !coursePathEncoded.isEmpty() ? "있음" : "없음"));
+        }
+    }
+    
+    private void displayCoursePath() {
+        if (map == null || coursePathEncoded == null || coursePathEncoded.isEmpty()) {
+            Log.w("RunningStartActivity", "코스 경로 표시 불가: 지도 또는 경로 데이터 없음");
+            return;
+        }
+        
+        try {
+            List<LatLng> coursePoints = PolylineUtils.decode(coursePathEncoded);
+            
+            if (coursePoints == null || coursePoints.isEmpty()) {
+                Log.w("RunningStartActivity", "코스 경로 디코딩 실패 또는 빈 경로");
+                return;
+            }
+            
+            Log.d("RunningStartActivity", "코스 경로 디코딩 완료: " + coursePoints.size() + "개 좌표");
+            
+            PolylineOptions coursePolylineOptions = new PolylineOptions()
+                    .addAll(coursePoints)
+                    .width(12f)
+                    .color(android.graphics.Color.parseColor("#4CAF50"))
+                    .geodesic(true);
+            
+            map.addPolyline(coursePolylineOptions);
+            
+            if (coursePoints.size() > 1) {
+                LatLngBounds.Builder boundsBuilder = new LatLngBounds.Builder();
+                for (LatLng point : coursePoints) {
+                    boundsBuilder.include(point);
+                }
+                LatLngBounds bounds = boundsBuilder.build();
+                
+                int padding = 100;
+                map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, padding));
+                
+                Log.d("RunningStartActivity", "코스 경로 지도에 표시 완료");
+            }
+        } catch (Exception e) {
+            Log.e("RunningStartActivity", "코스 경로 표시 중 오류", e);
         }
     }
 

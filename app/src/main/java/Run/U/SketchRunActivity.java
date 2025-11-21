@@ -3,19 +3,34 @@ package Run.U;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.TextView;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.FragmentManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 
-public class SketchRunActivity extends AppCompatActivity {
+public class SketchRunActivity extends AppCompatActivity implements OnMapReadyCallback {
 
     private RecyclerView recyclerViewCourses;
     private CourseAdapter courseAdapter;
@@ -26,10 +41,18 @@ public class SketchRunActivity extends AppCompatActivity {
     private TextView tvCourseTotalDistance;
     private TextView tvCourseEstimatedTime;
     private TextView tvDifficulty;
+    private TextView btnMoreCourses;
+    private FrameLayout mapContainer;
 
     private Course selectedCourse = null;
     private FirebaseFirestore firestore;
-    private List<Course> courses = new ArrayList<>();
+    private List<Course> allCourses = new ArrayList<>();
+    private List<Course> filteredCourses = new ArrayList<>();
+    private String selectedCategory = "전체";
+    
+    private GoogleMap map;
+    private SupportMapFragment mapFragment;
+    private Polyline coursePolyline;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,6 +85,25 @@ public class SketchRunActivity extends AppCompatActivity {
         tvCourseTotalDistance = findViewById(R.id.tvCourseTotalDistance);
         tvCourseEstimatedTime = findViewById(R.id.tvCourseEstimatedTime);
         tvDifficulty = findViewById(R.id.tvDifficulty);
+        btnMoreCourses = findViewById(R.id.btnMoreCourses);
+        mapContainer = findViewById(R.id.mapContainer);
+        
+        setupMap();
+    }
+    
+    private void setupMap() {
+        if (mapContainer == null) {
+            Log.w("SketchRunActivity", "mapContainer를 찾을 수 없습니다.");
+            return;
+        }
+        
+        FragmentManager fragmentManager = getSupportFragmentManager();
+        mapFragment = SupportMapFragment.newInstance();
+        fragmentManager.beginTransaction()
+                .replace(R.id.mapContainer, mapFragment)
+                .commit();
+        
+        mapFragment.getMapAsync(this);
     }
 
     private void setupToolbar() {
@@ -80,18 +122,26 @@ public class SketchRunActivity extends AppCompatActivity {
                 .get()
                 .addOnCompleteListener(task -> {
                     if (task.isSuccessful()) {
-                        courses.clear();
+                        allCourses.clear();
                         for (QueryDocumentSnapshot document : task.getResult()) {
                             Course course = documentToCourse(document);
                             if (course != null) {
-                                courses.add(course);
+                                allCourses.add(course);
                             }
                         }
+                        
+                        // 추천 코스: 랜덤 3개 선택
+                        List<Course> recommendedCourses = getRandomCourses(3);
+                        filteredCourses.clear();
+                        filteredCourses.addAll(recommendedCourses);
                         setupRecyclerView();
 
-                        if (!courses.isEmpty()) {
-                            selectedCourse = courses.get(0);
-                            updateCourseInfo(courses.get(0));
+                        if (!filteredCourses.isEmpty()) {
+                            selectedCourse = filteredCourses.get(0);
+                            updateCourseInfo(filteredCourses.get(0));
+                            if (map != null) {
+                                displayCoursePathOnMap(selectedCourse);
+                            }
                         } else {
                             GoogleSignInUtils.showToast(this, "등록된 코스가 없습니다.");
                         }
@@ -100,6 +150,18 @@ public class SketchRunActivity extends AppCompatActivity {
                         GoogleSignInUtils.showToast(this, "코스를 불러오는데 실패했습니다.");
                     }
                 });
+    }
+    
+    private List<Course> getRandomCourses(int count) {
+        if (allCourses.isEmpty() || count <= 0) {
+            return new ArrayList<>();
+        }
+        
+        List<Course> shuffled = new ArrayList<>(allCourses);
+        Collections.shuffle(shuffled, new Random());
+        
+        int size = Math.min(count, shuffled.size());
+        return shuffled.subList(0, size);
     }
 
     private Course documentToCourse(QueryDocumentSnapshot document) {
@@ -152,7 +214,7 @@ public class SketchRunActivity extends AppCompatActivity {
     }
 
     private void setupRecyclerView() {
-        courseAdapter = new CourseAdapter(courses, course -> {
+        courseAdapter = new CourseAdapter(filteredCourses, course -> {
             selectedCourse = course;
             updateCourseInfo(course);
         });
@@ -171,17 +233,80 @@ public class SketchRunActivity extends AppCompatActivity {
         tvCourseTotalDistance.setText(course.getDistanceFormatted());
         tvCourseEstimatedTime.setText(course.getEstimatedTimeFormatted());
         tvDifficulty.setText(course.getDifficultyKorean());
+        
+        displayCoursePathOnMap(course);
+    }
+    
+    @Override
+    public void onMapReady(GoogleMap googleMap) {
+        map = googleMap;
+        map.getUiSettings().setZoomControlsEnabled(true);
+        map.getUiSettings().setScrollGesturesEnabled(true);
+        
+        if (selectedCourse != null) {
+            displayCoursePathOnMap(selectedCourse);
+        }
+    }
+    
+    private void displayCoursePathOnMap(Course course) {
+        if (map == null || course == null) {
+            return;
+        }
+        
+        String pathEncoded = course.getPathEncoded();
+        if (pathEncoded == null || pathEncoded.isEmpty()) {
+            Log.w("SketchRunActivity", "코스 경로 데이터가 없습니다: " + course.getName());
+            return;
+        }
+        
+        try {
+            List<LatLng> coursePoints = PolylineUtils.decode(pathEncoded);
+            
+            if (coursePoints == null || coursePoints.isEmpty()) {
+                Log.w("SketchRunActivity", "코스 경로 디코딩 실패 또는 빈 경로: " + course.getName());
+                return;
+            }
+            
+            map.clear();
+            
+            PolylineOptions coursePolylineOptions = new PolylineOptions()
+                    .addAll(coursePoints)
+                    .width(12f)
+                    .color(android.graphics.Color.parseColor("#FF6B35"))
+                    .geodesic(true);
+            
+            coursePolyline = map.addPolyline(coursePolylineOptions);
+            
+            if (coursePoints.size() > 1) {
+                LatLngBounds.Builder boundsBuilder = new LatLngBounds.Builder();
+                for (LatLng point : coursePoints) {
+                    boundsBuilder.include(point);
+                }
+                LatLngBounds bounds = boundsBuilder.build();
+                
+                int padding = 50;
+                map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, padding));
+                
+                Log.d("SketchRunActivity", "코스 경로 지도에 표시 완료: " + course.getName() + " (" + coursePoints.size() + "개 좌표)");
+            }
+        } catch (Exception e) {
+            Log.e("SketchRunActivity", "코스 경로 표시 중 오류", e);
+        }
     }
 
     private void setupClickListeners() {
+        // 더보기 버튼 - 카테고리별 코스 목록 화면으로 이동
+        if (btnMoreCourses != null) {
+            btnMoreCourses.setOnClickListener(v -> {
+                Intent intent = new Intent(SketchRunActivity.this, CourseListActivity.class);
+                startActivity(intent);
+            });
+        }
+        
         // 코스 상세 보기 버튼
         btnCourseDetail.setOnClickListener(v -> {
             if (selectedCourse != null) {
-                GoogleSignInUtils.showToast(this, selectedCourse.getName() + " 상세 정보");
-                // TODO: 코스 상세 화면으로 이동
-                // Intent intent = new Intent(this, CourseDetailActivity.class);
-                // intent.putExtra("course_id", selectedCourse.getId());
-                // startActivity(intent);
+                showCourseDescription(selectedCourse);
             } else {
                 showCourseNotSelectedMessage();
             }
@@ -205,6 +330,39 @@ public class SketchRunActivity extends AppCompatActivity {
 
     private void showCourseNotSelectedMessage() {
         GoogleSignInUtils.showToast(this, "코스를 선택해주세요");
+    }
+    
+    private void showCourseDescription(Course course) {
+        LayoutInflater inflater = LayoutInflater.from(this);
+        View dialogView = inflater.inflate(R.layout.dialog_course_detail, null);
+        
+        TextView tvCourseName = dialogView.findViewById(R.id.tvCourseName);
+        TextView tvDetailDistance = dialogView.findViewById(R.id.tvDetailDistance);
+        TextView tvDetailTime = dialogView.findViewById(R.id.tvDetailTime);
+        TextView tvDetailDifficulty = dialogView.findViewById(R.id.tvDetailDifficulty);
+        TextView tvCourseDescription = dialogView.findViewById(R.id.tvCourseDescription);
+        MaterialButton btnConfirm = dialogView.findViewById(R.id.btnConfirm);
+        
+        String courseName = course.getName() != null ? course.getName() : "코스";
+        String description = course.getDescription();
+        
+        if (description == null || description.trim().isEmpty()) {
+            description = "코스에 대한 설명이 없습니다.";
+        }
+        
+        tvCourseName.setText(courseName);
+        tvDetailDistance.setText(course.getDistanceFormatted());
+        tvDetailTime.setText(course.getEstimatedTimeFormatted());
+        tvDetailDifficulty.setText(course.getDifficultyKorean());
+        tvCourseDescription.setText(description);
+        
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(dialogView)
+                .create();
+        
+        btnConfirm.setOnClickListener(v -> dialog.dismiss());
+        
+        dialog.show();
     }
 
     @Override

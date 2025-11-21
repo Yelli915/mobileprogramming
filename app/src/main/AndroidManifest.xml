@@ -46,6 +46,9 @@
         <activity
             android:name=".AdminCourseActivity"
             android:exported="false" />
+        <activity
+            android:name=".CourseListActivity"
+            android:exported="false" />
             
     </application>
 

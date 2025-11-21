@@ -16,11 +16,24 @@ import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.GeoPoint;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.android.gms.maps.model.LatLng;
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserFactory;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.StringReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import android.os.Handler;
+import android.os.Looper;
 
 public class AdminCourseActivity extends AppCompatActivity {
 
@@ -36,6 +49,9 @@ public class AdminCourseActivity extends AppCompatActivity {
     private MaterialButton saveCourseButton;
     private MaterialButton importSeoulCoursesButton;
     private MaterialButton clearFirestoreButton;
+    
+    private ExecutorService batchExecutor;
+    private volatile boolean isProcessingCancelled = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -98,6 +114,15 @@ public class AdminCourseActivity extends AppCompatActivity {
         Log.d("AdminCourseActivity", "========================================");
         
         checkAdminPermission();
+    }
+    
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        isProcessingCancelled = true;
+        if (batchExecutor != null && !batchExecutor.isShutdown()) {
+            batchExecutor.shutdownNow();
+        }
     }
 
     private void checkAdminPermission() {
@@ -312,27 +337,137 @@ public class AdminCourseActivity extends AppCompatActivity {
             return;
         }
 
-        Log.d("AdminCourseActivity", "코스 업로드 시작 - 총 " + totalCount + "개");
-
-        for (ApiCourseItem apiCourse : apiCourses) {
+        Log.d("AdminCourseActivity", "코스 업로드 시작 - 총 " + totalCount + "개 (20개씩 배치 처리)");
+        
+        isProcessingCancelled = false;
+        batchExecutor = Executors.newSingleThreadExecutor();
+        
+        processCoursesInBatches(apiCourses, adminCreatorId, successCount, skipCount, failCount, 
+                completedCount, isCompleted, totalCount, progressDialog, 0);
+    }
+    
+    private void processCoursesInBatches(List<ApiCourseItem> apiCourses, String adminCreatorId,
+                                         AtomicInteger successCount, AtomicInteger skipCount, AtomicInteger failCount,
+                                         AtomicInteger completedCount, AtomicBoolean isCompleted, int totalCount,
+                                         ProgressDialog progressDialog, int batchStartIndex) {
+        if (isProcessingCancelled || batchExecutor == null || batchExecutor.isShutdown()) {
+            Log.w("AdminCourseActivity", "처리가 취소되었거나 Executor가 종료됨");
+            return;
+        }
+        
+        final int BATCH_SIZE = 20;
+        int batchEndIndex = Math.min(batchStartIndex + BATCH_SIZE, apiCourses.size());
+        List<ApiCourseItem> currentBatch = new ArrayList<>(apiCourses.subList(batchStartIndex, batchEndIndex));
+        
+        Log.d("AdminCourseActivity", String.format("배치 처리 시작: %d~%d번째 코스 (%d개)", 
+                batchStartIndex + 1, batchEndIndex, currentBatch.size()));
+        
+        Handler mainHandler = new Handler(Looper.getMainLooper());
+        
+        batchExecutor.execute(() -> {
+            if (isProcessingCancelled) {
+                return;
+            }
+            
+            processBatchSequentially(currentBatch, adminCreatorId, successCount, skipCount, failCount,
+                    completedCount, isCompleted, totalCount, progressDialog, mainHandler, batchStartIndex);
+            
+            if (!isProcessingCancelled && batchEndIndex < apiCourses.size()) {
+                mainHandler.post(() -> {
+                    if (!isProcessingCancelled) {
+                        processCoursesInBatches(apiCourses, adminCreatorId, successCount, skipCount, failCount,
+                                completedCount, isCompleted, totalCount, progressDialog, batchEndIndex);
+                    }
+                });
+            } else if (batchEndIndex >= apiCourses.size()) {
+                Log.d("AdminCourseActivity", "모든 배치 처리 완료 - Executor 종료");
+                batchExecutor.shutdown();
+            }
+        });
+    }
+    
+    private void processBatchSequentially(List<ApiCourseItem> batch, String adminCreatorId,
+                                          AtomicInteger successCount, AtomicInteger skipCount, AtomicInteger failCount,
+                                          AtomicInteger completedCount, AtomicBoolean isCompleted, int totalCount,
+                                          ProgressDialog progressDialog, Handler mainHandler, int batchStartIndex) {
+        for (int i = 0; i < batch.size(); i++) {
+            if (isProcessingCancelled) {
+                Log.w("AdminCourseActivity", "처리가 취소되어 배치 처리 중단");
+                break;
+            }
+            
+            ApiCourseItem apiCourse = batch.get(i);
+            int currentIndex = batchStartIndex + i;
+            
             if (apiCourse.getCrsIdx() == null || apiCourse.getCrsIdx().isEmpty()) {
                 skipCount.incrementAndGet();
                 Log.w("AdminCourseActivity", "crsIdx가 없어 건너뜀: " + apiCourse.getCrsKorNm());
-                updateProgressDialog(progressDialog, completedCount.incrementAndGet(), totalCount);
-                if (completedCount.get() >= totalCount && !isCompleted.getAndSet(true)) {
-                    checkUploadComplete(totalCount, successCount, skipCount, failCount, progressDialog);
-                }
+                mainHandler.post(() -> {
+                    if (!isProcessingCancelled && progressDialog != null && progressDialog.isShowing()) {
+                        updateProgressDialog(progressDialog, completedCount.incrementAndGet(), totalCount);
+                        if (completedCount.get() >= totalCount && !isCompleted.getAndSet(true)) {
+                            checkUploadComplete(totalCount, successCount, skipCount, failCount, progressDialog);
+                        }
+                    }
+                });
                 continue;
             }
-
-            uploadCourseWithDuplicateCheck(apiCourse, adminCreatorId, successCount, skipCount, failCount, 
-                    completedCount, isCompleted, totalCount, progressDialog);
+            
+            String pathEncoded = "";
+            String gpxUrl = apiCourse.getGpxpath();
+            
+            if (gpxUrl != null && !gpxUrl.isEmpty()) {
+                Log.d("AdminCourseActivity", String.format("GPX 다운로드 중 (%d/%d): %s", 
+                        currentIndex + 1, totalCount, apiCourse.getCrsKorNm()));
+                
+                mainHandler.post(() -> {
+                    if (!isProcessingCancelled && progressDialog != null && progressDialog.isShowing()) {
+                        updateProgressDialog(progressDialog, currentIndex, totalCount, 
+                                String.format("GPX 다운로드 중: %s (%d/%d)", apiCourse.getCrsKorNm(), currentIndex + 1, totalCount));
+                    }
+                });
+                
+                String gpxContent = downloadGpxContent(gpxUrl);
+                if (gpxContent != null && !gpxContent.isEmpty()) {
+                    List<LatLng> points = parseGpxToLatLngList(gpxContent);
+                    if (points != null && !points.isEmpty()) {
+                        pathEncoded = PolylineUtils.encode(points);
+                        Log.d("AdminCourseActivity", String.format("GPX 파싱 완료: %d개 좌표 추출", points.size()));
+                    } else {
+                        Log.w("AdminCourseActivity", "GPX에서 좌표를 추출할 수 없음: " + apiCourse.getCrsKorNm());
+                    }
+                } else {
+                    Log.w("AdminCourseActivity", "GPX 다운로드 실패: " + apiCourse.getCrsKorNm());
+                }
+            } else {
+                Log.w("AdminCourseActivity", "gpxpath가 없음: " + apiCourse.getCrsKorNm());
+            }
+            
+            final String finalPathEncoded = pathEncoded;
+            mainHandler.post(() -> {
+                if (!isProcessingCancelled) {
+                    uploadCourseWithDuplicateCheck(apiCourse, adminCreatorId, finalPathEncoded, 
+                            successCount, skipCount, failCount, completedCount, isCompleted, totalCount, progressDialog);
+                }
+            });
+            
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                Log.w("AdminCourseActivity", "스레드가 인터럽트됨");
+                break;
+            }
         }
     }
 
-    private void uploadCourseWithDuplicateCheck(ApiCourseItem apiCourse, String adminCreatorId,
+    private void uploadCourseWithDuplicateCheck(ApiCourseItem apiCourse, String adminCreatorId, String pathEncoded,
                                                   AtomicInteger successCount, AtomicInteger skipCount, AtomicInteger failCount,
                                                   AtomicInteger completedCount, AtomicBoolean isCompleted, int totalCount, ProgressDialog progressDialog) {
+        if (isProcessingCancelled) {
+            return;
+        }
+        
         String crsIdx = apiCourse.getCrsIdx();
         
         firestore.collection("courses")
@@ -340,7 +475,11 @@ public class AdminCourseActivity extends AppCompatActivity {
                 .limit(1)
                 .get()
                 .addOnSuccessListener(querySnapshot -> {
-                    Map<String, Object> courseData = convertApiCourseToFirestoreData(apiCourse, adminCreatorId, querySnapshot.isEmpty());
+                    if (isProcessingCancelled) {
+                        return;
+                    }
+                    
+                    Map<String, Object> courseData = convertApiCourseToFirestoreData(apiCourse, adminCreatorId, pathEncoded, querySnapshot.isEmpty());
                     
                     if (!querySnapshot.isEmpty()) {
                         String existingDocId = querySnapshot.getDocuments().get(0).getId();
@@ -349,17 +488,27 @@ public class AdminCourseActivity extends AppCompatActivity {
                         firestore.collection("courses").document(existingDocId)
                                 .update(courseData)
                                 .addOnSuccessListener(aVoid -> {
+                                    if (isProcessingCancelled) {
+                                        return;
+                                    }
                                     successCount.incrementAndGet();
                                     Log.d("AdminCourseActivity", "✅ 코스 업데이트 성공: " + apiCourse.getCrsKorNm());
-                                    updateProgressDialog(progressDialog, completedCount.incrementAndGet(), totalCount);
+                                    if (progressDialog != null && progressDialog.isShowing()) {
+                                        updateProgressDialog(progressDialog, completedCount.incrementAndGet(), totalCount);
+                                    }
                                     if (completedCount.get() >= totalCount && !isCompleted.getAndSet(true)) {
                                         checkUploadComplete(totalCount, successCount, skipCount, failCount, progressDialog);
                                     }
                                 })
                                 .addOnFailureListener(e -> {
+                                    if (isProcessingCancelled) {
+                                        return;
+                                    }
                                     failCount.incrementAndGet();
                                     Log.e("AdminCourseActivity", "❌ 코스 업데이트 실패: " + apiCourse.getCrsKorNm(), e);
-                                    updateProgressDialog(progressDialog, completedCount.incrementAndGet(), totalCount);
+                                    if (progressDialog != null && progressDialog.isShowing()) {
+                                        updateProgressDialog(progressDialog, completedCount.incrementAndGet(), totalCount);
+                                    }
                                     if (completedCount.get() >= totalCount && !isCompleted.getAndSet(true)) {
                                         checkUploadComplete(totalCount, successCount, skipCount, failCount, progressDialog);
                                     }
@@ -368,17 +517,27 @@ public class AdminCourseActivity extends AppCompatActivity {
                         firestore.collection("courses")
                                 .add(courseData)
                                 .addOnSuccessListener(documentReference -> {
+                                    if (isProcessingCancelled) {
+                                        return;
+                                    }
                                     successCount.incrementAndGet();
                                     Log.d("AdminCourseActivity", "✅ 코스 업로드 성공: " + apiCourse.getCrsKorNm() + " (ID: " + documentReference.getId() + ")");
-                                    updateProgressDialog(progressDialog, completedCount.incrementAndGet(), totalCount);
+                                    if (progressDialog != null && progressDialog.isShowing()) {
+                                        updateProgressDialog(progressDialog, completedCount.incrementAndGet(), totalCount);
+                                    }
                                     if (completedCount.get() >= totalCount && !isCompleted.getAndSet(true)) {
                                         checkUploadComplete(totalCount, successCount, skipCount, failCount, progressDialog);
                                     }
                                 })
                                 .addOnFailureListener(e -> {
+                                    if (isProcessingCancelled) {
+                                        return;
+                                    }
                                     failCount.incrementAndGet();
                                     Log.e("AdminCourseActivity", "❌ 코스 업로드 실패: " + apiCourse.getCrsKorNm(), e);
-                                    updateProgressDialog(progressDialog, completedCount.incrementAndGet(), totalCount);
+                                    if (progressDialog != null && progressDialog.isShowing()) {
+                                        updateProgressDialog(progressDialog, completedCount.incrementAndGet(), totalCount);
+                                    }
                                     if (completedCount.get() >= totalCount && !isCompleted.getAndSet(true)) {
                                         checkUploadComplete(totalCount, successCount, skipCount, failCount, progressDialog);
                                     }
@@ -386,46 +545,34 @@ public class AdminCourseActivity extends AppCompatActivity {
                     }
                 })
                 .addOnFailureListener(e -> {
+                    if (isProcessingCancelled) {
+                        return;
+                    }
                     failCount.incrementAndGet();
                     Log.e("AdminCourseActivity", "❌ 중복 체크 실패: " + apiCourse.getCrsKorNm(), e);
-                    updateProgressDialog(progressDialog, completedCount.incrementAndGet(), totalCount);
+                    if (progressDialog != null && progressDialog.isShowing()) {
+                        updateProgressDialog(progressDialog, completedCount.incrementAndGet(), totalCount);
+                    }
                     if (completedCount.get() >= totalCount && !isCompleted.getAndSet(true)) {
                         checkUploadComplete(totalCount, successCount, skipCount, failCount, progressDialog);
                     }
                 });
     }
 
-    private void fallbackToCreate(String existingDocId, ApiCourseItem apiCourse, String adminCreatorId,
-                                   AtomicInteger successCount, AtomicInteger skipCount, AtomicInteger failCount,
-                                   AtomicInteger completedCount, AtomicBoolean isCompleted, int totalCount, ProgressDialog progressDialog) {
-        Map<String, Object> createData = convertApiCourseToFirestoreData(apiCourse, adminCreatorId, true);
-        firestore.collection("courses").document(existingDocId)
-                .set(createData)
-                .addOnSuccessListener(aVoid -> {
-                    successCount.incrementAndGet();
-                    Log.d("AdminCourseActivity", "코스 재생성 성공: " + apiCourse.getCrsKorNm());
-                    updateProgressDialog(progressDialog, completedCount.incrementAndGet(), totalCount);
-                    if (completedCount.get() >= totalCount && !isCompleted.getAndSet(true)) {
-                        checkUploadComplete(totalCount, successCount, skipCount, failCount, progressDialog);
-                    }
-                })
-                .addOnFailureListener(e -> {
-                    failCount.incrementAndGet();
-                    Log.e("AdminCourseActivity", "코스 재생성 실패: " + apiCourse.getCrsKorNm(), e);
-                    updateProgressDialog(progressDialog, completedCount.incrementAndGet(), totalCount);
-                    if (completedCount.get() >= totalCount && !isCompleted.getAndSet(true)) {
-                        checkUploadComplete(totalCount, successCount, skipCount, failCount, progressDialog);
-                    }
-                });
-    }
 
     private void updateProgressDialog(ProgressDialog progressDialog, int completedCount, int totalCount) {
+        updateProgressDialog(progressDialog, completedCount, totalCount, null);
+    }
+    
+    private void updateProgressDialog(ProgressDialog progressDialog, int completedCount, int totalCount, String detailMessage) {
         if (progressDialog != null && progressDialog.isShowing()) {
             int progress = completedCount;
             progressDialog.setProgress(progress);
             double percent = (double) progress / totalCount * 100;
-            progressDialog.setMessage(String.format("코스를 업로드하는 중... (%d/%d, %.0f%%)", 
-                    progress, totalCount, percent));
+            String message = detailMessage != null 
+                    ? String.format("%s (%d/%d, %.0f%%)", detailMessage, progress, totalCount, percent)
+                    : String.format("코스를 업로드하는 중... (%d/%d, %.0f%%)", progress, totalCount, percent);
+            progressDialog.setMessage(message);
         }
     }
 
@@ -466,7 +613,7 @@ public class AdminCourseActivity extends AppCompatActivity {
                 .show();
     }
 
-    private Map<String, Object> convertApiCourseToFirestoreData(ApiCourseItem apiCourse, String adminCreatorId, boolean isNewDocument) {
+    private Map<String, Object> convertApiCourseToFirestoreData(ApiCourseItem apiCourse, String adminCreatorId, String pathEncoded, boolean isNewDocument) {
         Map<String, Object> courseData = new HashMap<>();
 
         courseData.put("name", apiCourse.getCrsKorNm() != null ? apiCourse.getCrsKorNm() : "");
@@ -494,7 +641,7 @@ public class AdminCourseActivity extends AppCompatActivity {
             courseData.put("estimatedTime", 0);
         }
 
-        courseData.put("pathEncoded", "");
+        courseData.put("pathEncoded", pathEncoded != null ? pathEncoded : "");
         courseData.put("adminCreatorId", adminCreatorId);
         
         if (isNewDocument) {
@@ -502,6 +649,10 @@ public class AdminCourseActivity extends AppCompatActivity {
         }
         
         courseData.put("crsIdx", apiCourse.getCrsIdx());
+        
+        if (apiCourse.getGpxpath() != null && !apiCourse.getGpxpath().isEmpty()) {
+            courseData.put("gpxUrl", apiCourse.getGpxpath());
+        }
 
         return courseData;
     }
@@ -635,6 +786,87 @@ public class AdminCourseActivity extends AppCompatActivity {
             clearFirestoreButton.setEnabled(true);
             clearFirestoreButton.setText("데이터 비우기");
         }
+    }
+    
+    private String downloadGpxContent(String gpxUrlString) {
+        if (gpxUrlString == null || gpxUrlString.isEmpty()) {
+            Log.w("AdminCourseActivity", "GPX URL이 비어있음");
+            return null;
+        }
+        
+        StringBuilder result = new StringBuilder();
+        try {
+            URL url = new URL(gpxUrlString);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(15000);
+            conn.setRequestProperty("User-Agent", "RunningApp/1.0");
+            
+            int responseCode = conn.getResponseCode();
+            if (responseCode >= 200 && responseCode < 300) {
+                BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(conn.getInputStream(), "UTF-8"));
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    result.append(line).append("\n");
+                }
+                reader.close();
+                conn.disconnect();
+                return result.toString();
+            } else {
+                Log.w("AdminCourseActivity", "GPX 다운로드 실패: HTTP " + responseCode + " - " + gpxUrlString);
+                conn.disconnect();
+                return null;
+            }
+        } catch (Exception e) {
+            Log.e("AdminCourseActivity", "GPX 다운로드 중 오류: " + gpxUrlString, e);
+            return null;
+        }
+    }
+    
+    private List<LatLng> parseGpxToLatLngList(String gpxXmlString) {
+        List<LatLng> points = new ArrayList<>();
+        if (gpxXmlString == null || gpxXmlString.isEmpty()) {
+            return points;
+        }
+        
+        try {
+            XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
+            factory.setNamespaceAware(true);
+            XmlPullParser parser = factory.newPullParser();
+            parser.setInput(new StringReader(gpxXmlString));
+            
+            int eventType = parser.getEventType();
+            double lat = 0, lon = 0;
+            
+            while (eventType != XmlPullParser.END_DOCUMENT) {
+                String tagName = parser.getName();
+                
+                if (eventType == XmlPullParser.START_TAG && "trkpt".equals(tagName)) {
+                    String latStr = parser.getAttributeValue(null, "lat");
+                    String lonStr = parser.getAttributeValue(null, "lon");
+                    
+                    if (latStr != null && lonStr != null) {
+                        try {
+                            lat = Double.parseDouble(latStr);
+                            lon = Double.parseDouble(lonStr);
+                            points.add(new LatLng(lat, lon));
+                        } catch (NumberFormatException e) {
+                            Log.w("AdminCourseActivity", "좌표 파싱 실패: lat=" + latStr + ", lon=" + lonStr);
+                        }
+                    }
+                }
+                
+                eventType = parser.next();
+            }
+            
+            Log.d("AdminCourseActivity", "GPX 파싱 완료: " + points.size() + "개 좌표 추출");
+        } catch (Exception e) {
+            Log.e("AdminCourseActivity", "GPX 파싱 중 오류", e);
+        }
+        
+        return points;
     }
 }
 
