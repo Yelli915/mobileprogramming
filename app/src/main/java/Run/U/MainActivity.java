@@ -89,7 +89,7 @@ public class MainActivity extends AppCompatActivity {
         startCourseRunButton.setOnClickListener(v -> startCourseSelection());
 
         viewAllButton.setOnClickListener(v -> {
-            // 전체 기록 보기 Activity로 이동
+            // 전체 기록 Activity로 이동 (가장 최근 기록 표시)
             Intent intent = new Intent(MainActivity.this, RunningRecordActivity.class);
             startActivity(intent);
         });
@@ -105,6 +105,7 @@ public class MainActivity extends AppCompatActivity {
         // 전체 기록 보기 버튼
         if (viewAllButton != null) {
             viewAllButton.setOnClickListener(v -> {
+                // 전체 기록 Activity로 이동 (가장 최근 기록 표시)
                 Intent intent = new Intent(MainActivity.this, RunningRecordActivity.class);
                 startActivity(intent);
             });

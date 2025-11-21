@@ -13,6 +13,7 @@ import android.speech.tts.UtteranceProgressListener;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -168,6 +169,12 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
         pauseButton = findViewById(R.id.pauseButton);
         resumeButton = findViewById(R.id.resumeButton);
         endRunButton = findViewById(R.id.endRunButton);
+
+        // 뒤로가기 버튼 설정
+        ImageButton backButton = findViewById(R.id.backButton);
+        if (backButton != null) {
+            backButton.setOnClickListener(v -> finish());
+        }
 
         if (timerTextView == null || distanceTextView == null || averagePaceTextView == null
                 || instantPaceTextView == null || pauseButton == null || endRunButton == null

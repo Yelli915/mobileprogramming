@@ -11,107 +11,127 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <!-- Header: 뒤로가기 버튼과 제목 -->
-        <include
-            android:id="@+id/header_back"
-            layout="@layout/layout_header_back" />
-
-        <!-- 필터 버튼들: 날짜별, 경로별, 통계 -->
+        <!-- Header: 뒤로가기 버튼과 러닝 기록 목록 제목 (한 줄 배치) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="16dp">
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
 
-            <Button
-                android:id="@+id/btn_date_filter"
-                android:layout_width="0dp"
-                android:layout_height="80dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="8dp"
-                android:text="날짜별"
-                android:textSize="14sp"
-                android:drawableTop="@android:drawable/ic_menu_today"
-                android:gravity="center"
-                android:backgroundTint="#FF6B35" />
+            <ImageButton
+                android:id="@+id/backButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="12dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="뒤로가기"
+                android:src="@android:drawable/ic_menu_revert" />
 
-            <Button
-                android:id="@+id/btn_route_filter"
+            <TextView
+                android:id="@+id/tv_title"
                 android:layout_width="0dp"
-                android:layout_height="80dp"
+                android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:layout_marginEnd="8dp"
-                android:text="경로별"
-                android:textSize="14sp"
-                android:drawableTop="@android:drawable/ic_menu_myplaces"
-                android:gravity="center"
-                android:backgroundTint="#FF6B35" />
-
-            <Button
-                android:id="@+id/btn_statistics"
-                android:layout_width="0dp"
-                android:layout_height="80dp"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:text="통계"
-                android:textSize="14sp"
-                android:drawableTop="@android:drawable/ic_menu_sort_by_size"
-                android:gravity="center"
-                android:backgroundTint="#FF6B35" />
+                android:text="러닝 기록 목록"
+                android:textSize="18sp"
+                android:textStyle="bold" />
 
         </LinearLayout>
 
-        <!-- 러닝 기록 목록 제목 -->
-        <TextView
+        <!-- 필터 버튼들: 날짜별, 난이도별, 통계 (AllRecordsActivity에서만 사용) -->
+        <LinearLayout
+            android:id="@+id/filter_buttons_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="러닝 기록 목록"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="8dp" />
+            android:orientation="horizontal"
+            android:layout_marginBottom="20dp"
+            android:visibility="gone">
 
-        <!-- 러닝 기록 목록 RecyclerView -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rv_running_records"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            android:nestedScrollingEnabled="false" />
-
-        <!-- 지도 영역 -->
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="300dp"
-            android:layout_marginBottom="16dp"
-            android:background="@android:color/darker_gray">
-
-            <fragment
-                android:id="@+id/map_fragment"
-                android:name="com.google.android.gms.maps.SupportMapFragment"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent" />
-
-            <TextView
-                android:layout_width="wrap_content"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_date_filter"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:text="이 경로의 지도"
-                android:textColor="@android:color/white"
-                android:textSize="16sp" />
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:minHeight="64dp"
+                android:text="날짜별"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textAllCaps="false"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                app:icon="@android:drawable/ic_menu_today"
+                app:iconGravity="textTop"
+                app:iconPadding="4dp"
+                app:iconSize="24dp"
+                app:iconTint="@color/text_primary"
+                app:cornerRadius="12dp"
+                app:strokeWidth="2dp"
+                app:strokeColor="#FF6B35"
+                app:backgroundTint="@android:color/transparent" />
 
-        </FrameLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_route_filter"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:layout_marginEnd="6dp"
+                android:minHeight="64dp"
+                android:text="난이도별"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textAllCaps="false"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                app:icon="@android:drawable/ic_menu_myplaces"
+                app:iconGravity="textTop"
+                app:iconPadding="4dp"
+                app:iconSize="24dp"
+                app:iconTint="@color/text_primary"
+                app:cornerRadius="12dp"
+                app:strokeWidth="2dp"
+                app:strokeColor="#FF6B35"
+                app:backgroundTint="@android:color/transparent" />
 
-        <!-- 오늘의 기록 요약 -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="오늘의 기록 요약"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="8dp" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_statistics"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:minHeight="64dp"
+                android:text="통계"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textAllCaps="false"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                app:icon="@android:drawable/ic_menu_sort_by_size"
+                app:iconGravity="textTop"
+                app:iconPadding="4dp"
+                app:iconSize="24dp"
+                app:iconTint="@color/text_primary"
+                app:cornerRadius="12dp"
+                app:strokeWidth="2dp"
+                app:strokeColor="#FF6B35"
+                app:backgroundTint="@android:color/transparent" />
 
+        </LinearLayout>
+
+        <!-- 전체 통계 (AllRecordsActivity에서만 사용) -->
         <GridLayout
+            android:id="@+id/total_statistics_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:columnCount="2"
@@ -119,94 +139,8 @@
             android:alignmentMode="alignMargins"
             android:columnOrderPreserved="false"
             android:useDefaultMargins="false"
-            android:layout_marginBottom="16dp">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_columnWeight="1"
-                android:layout_margin="4dp"
-                android:orientation="vertical"
-                android:background="@drawable/card_background"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="조깅"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="8dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="10km 러닝"
-                    android:textSize="16sp"
-                    android:layout_marginBottom="4dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="거리: 10km..."
-                    android:textSize="12sp"
-                    android:textColor="@android:color/darker_gray" />
-
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_columnWeight="1"
-                android:layout_margin="4dp"
-                android:orientation="vertical"
-                android:background="@drawable/card_background"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="트레일"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="8dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="5km 러닝"
-                    android:textSize="16sp"
-                    android:layout_marginBottom="4dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="거리: 5km..."
-                    android:textSize="12sp"
-                    android:textColor="@android:color/darker_gray" />
-
-            </LinearLayout>
-
-        </GridLayout>
-
-        <!-- 전체 통계 -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="전체 통계"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="8dp" />
-
-        <GridLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:columnCount="2"
-            android:rowCount="1"
-            android:alignmentMode="alignMargins"
-            android:columnOrderPreserved="false"
-            android:useDefaultMargins="false"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="16dp"
+            android:visibility="gone">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -229,7 +163,7 @@
                     android:id="@+id/tv_total_distance"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="150km"
+                    android:text="0.0km"
                     android:textSize="24sp"
                     android:textStyle="bold" />
 
@@ -256,7 +190,7 @@
                     android:id="@+id/tv_total_time"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="12시간"
+                    android:text="0분"
                     android:textSize="24sp"
                     android:textStyle="bold" />
 
@@ -264,19 +198,254 @@
 
         </GridLayout>
 
+        <!-- 러닝 기록 목록 RecyclerView -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rv_running_records"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:nestedScrollingEnabled="false" />
+
+        <!-- 지도 영역 -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="300dp"
+            android:layout_marginBottom="16dp"
+            android:background="@android:color/darker_gray">
+
+            <fragment
+                android:id="@+id/map_fragment"
+                android:name="com.google.android.gms.maps.SupportMapFragment"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+        </FrameLayout>
+
+        <!-- 가장 최근 기록 통합 카드 -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/recent_record_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="4dp"
+            app:cardBackgroundColor="@android:color/white">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <!-- 상단: 가장 최근 기록 + 날짜 (한 줄) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="가장 최근 기록"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:textColor="#FF6B35"
+                        android:layout_marginEnd="12dp" />
+
+                    <TextView
+                        android:id="@+id/tv_recent_record_year"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="2024년"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:id="@+id/tv_recent_record_month_day"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text=" 12월 25일"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:id="@+id/tv_recent_record_weekday"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text=" (수요일)"
+                        android:textSize="14sp"
+                        android:textColor="@color/text_secondary_gray"
+                        android:layout_marginStart="8dp" />
+
+                </LinearLayout>
+
+                <!-- 구분선 -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="?attr/colorSurfaceVariant"
+                    android:layout_marginBottom="16dp" />
+
+                <!-- 중간: 코스 이름 (스케치 러닝인 경우) -->
+                <TextView
+                    android:id="@+id/tv_recent_record_course_name"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="📍 경복궁 러닝코스"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:visibility="gone"
+                    android:layout_marginBottom="16dp" />
+
+                <!-- 하단: 정보 (거리, 시간, 페이스, 타입) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <!-- 거리 -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="center">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="거리"
+                            android:textSize="12sp"
+                            android:textColor="@color/text_secondary_gray"
+                            android:layout_marginBottom="4dp" />
+
+                        <TextView
+                            android:id="@+id/tv_recent_record_distance"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="0.0km"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:textColor="#FF6B35"
+                            android:gravity="center" />
+
+                    </LinearLayout>
+
+                    <!-- 구분선 -->
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="40dp"
+                        android:background="?attr/colorSurfaceVariant" />
+
+                    <!-- 시간 -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="center">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="시간"
+                            android:textSize="12sp"
+                            android:textColor="@color/text_secondary_gray"
+                            android:layout_marginBottom="4dp" />
+
+                        <TextView
+                            android:id="@+id/tv_recent_record_time"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="50분"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_primary"
+                            android:gravity="center" />
+
+                    </LinearLayout>
+
+                    <!-- 구분선 -->
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="40dp"
+                        android:background="?attr/colorSurfaceVariant" />
+
+                    <!-- 페이스 -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="center">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="페이스"
+                            android:textSize="12sp"
+                            android:textColor="@color/text_secondary_gray"
+                            android:layout_marginBottom="4dp" />
+
+                        <TextView
+                            android:id="@+id/tv_recent_record_pace"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="5:00/km"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_primary"
+                            android:gravity="center" />
+
+                    </LinearLayout>
+
+                    <!-- 구분선 -->
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="40dp"
+                        android:background="?attr/colorSurfaceVariant" />
+
+                    <!-- 타입 -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="center">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="타입"
+                            android:textSize="12sp"
+                            android:textColor="@color/text_secondary_gray"
+                            android:layout_marginBottom="4dp" />
+
+                        <TextView
+                            android:id="@+id/tv_recent_record_type"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="일반 운동"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_primary"
+                            android:gravity="center" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
         <!-- 액션 버튼들 -->
-        <Button
-            android:id="@+id/btn_rate"
-            style="@style/ButtonPrimary"
-            android:text="별점 평가하기"
-            android:layout_marginBottom="12dp" />
-
-        <Button
-            android:id="@+id/btn_share"
-            style="@style/ButtonPrimary"
-            android:text="공유하기"
-            android:layout_marginBottom="12dp" />
-
         <Button
             android:id="@+id/btn_view_more"
             style="@style/ButtonPrimary"

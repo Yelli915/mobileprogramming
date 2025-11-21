@@ -6,10 +6,34 @@
     android:orientation="vertical"
     android:background="@android:color/white">
 
-    <!-- Header: 뒤로가기 버튼과 제목 -->
-    <include
-        android:id="@+id/header_back"
-        layout="@layout/layout_header_back" />
+    <!-- Header: 뒤로가기 버튼과 실시간 기록 제목 (한 줄 배치) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="16dp"
+        android:background="@android:color/white">
+
+        <ImageButton
+            android:id="@+id/backButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="뒤로가기"
+            android:src="@android:drawable/ic_menu_revert" />
+
+        <TextView
+            android:id="@+id/tv_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="12dp"
+            android:text="실시간 기록"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
 
     <!-- Real-time Record Section -->
     <LinearLayout
@@ -18,14 +42,6 @@
         android:orientation="vertical"
         android:padding="16dp"
         android:background="@android:color/white">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="실시간 기록"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="8dp" />
 
         <GridLayout
             android:layout_width="match_parent"

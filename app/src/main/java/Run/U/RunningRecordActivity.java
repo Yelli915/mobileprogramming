@@ -29,21 +29,28 @@ import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.Query;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
 public class RunningRecordActivity extends AppCompatActivity implements OnMapReadyCallback {
 
     private ImageButton backButton;
-    private Button dateFilterButton;
-    private Button routeFilterButton;
-    private Button statisticsButton;
     private RecyclerView recordRecyclerView;
-    private TextView totalDistanceText;
-    private TextView totalTimeText;
-    private Button rateButton;
-    private Button shareButton;
     private Button viewMoreButton;
+    private TextView titleTextView;
+    private TextView tvRecentRecordYear;
+    private TextView tvRecentRecordMonthDay;
+    private TextView tvRecentRecordWeekday;
+    private androidx.cardview.widget.CardView recentRecordDateCard;
+    private androidx.cardview.widget.CardView recentRecordInfoCard;
+    private TextView tvRecentRecordDistance;
+    private TextView tvRecentRecordTime;
+    private TextView tvRecentRecordPace;
+    private TextView tvRecentRecordType;
+    private TextView tvRecentRecordCourseName;
+    private java.util.Map<String, String> courseNameCache = new java.util.HashMap<>();
 
     private RunningRecordAdapter recordAdapter;
     private GoogleMap googleMap;
@@ -52,6 +59,7 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
     private List<RunningRecord> records = new ArrayList<>();
     private ListenerRegistration runsListener;
     private RunningRecord selectedRecord = null; // 현재 선택된 기록 추적
+    private boolean showTodayOnly = false; // 오늘의 기록만 표시할지 여부
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,6 +70,20 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
         initFirestore();
         setupMap();
         setupClickListeners();
+        
+        // Intent에서 설정 확인 (더 이상 사용하지 않음 - 모든 기록 표시)
+        Intent intent = getIntent();
+        if (intent != null && intent.hasExtra("show_today_only")) {
+            showTodayOnly = intent.getBooleanExtra("show_today_only", false);
+            if (showTodayOnly && titleTextView != null) {
+                // 제목을 "오늘의 기록 요약"으로 변경
+                titleTextView.setText("오늘의 기록 요약");
+            }
+        } else {
+            // show_today_only가 없으면 모든 기록 표시 (기본값)
+            showTodayOnly = false;
+        }
+        
         loadRecordsFromFirestore();
         
         // Intent에서 새로운 운동 기록 데이터 받기
@@ -95,12 +117,27 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
             runsListener.remove();
         }
 
-        // 실시간 리스너 등록
-        runsListener = firestore.collection("users")
+        // 오늘의 기록만 필터링할지 결정
+        com.google.firebase.firestore.Query query = firestore.collection("users")
                 .document(userId)
                 .collection("runs")
-                .orderBy("startTime", Query.Direction.DESCENDING)
-                .addSnapshotListener((snapshot, e) -> {
+                .orderBy("startTime", Query.Direction.DESCENDING);
+        
+        // 오늘의 기록만 표시하는 경우 필터 추가
+        if (showTodayOnly) {
+            Calendar calendar = Calendar.getInstance();
+            calendar.set(Calendar.HOUR_OF_DAY, 0);
+            calendar.set(Calendar.MINUTE, 0);
+            calendar.set(Calendar.SECOND, 0);
+            calendar.set(Calendar.MILLISECOND, 0);
+            Date todayStart = calendar.getTime();
+            com.google.firebase.Timestamp todayStartTimestamp = new com.google.firebase.Timestamp(todayStart);
+            
+            query = query.whereGreaterThanOrEqualTo("startTime", todayStartTimestamp);
+        }
+
+        // 실시간 리스너 등록
+        runsListener = query.addSnapshotListener((snapshot, e) -> {
                     if (e != null) {
                         Log.w("RunningRecordActivity", "기록 리스너 오류", e);
                         return;
@@ -121,21 +158,25 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
                             }
                             records.sort((r1, r2) -> Long.compare(r2.getCreatedAt(), r1.getCreatedAt()));
                             
-                            // 통계 업데이트
-                            updateStatistics();
-                            
                             // 빈 상태 처리
                             if (records.isEmpty()) {
                                 selectedRecord = null;
                                 if (googleMap != null) {
                                     googleMap.clear();
                                 }
+                                // 카드 숨기기
+                                if (recentRecordDateCard != null) {
+                                    recentRecordDateCard.setVisibility(View.GONE);
+                                }
                             } else {
-                                // 첫 번째 기록 선택
+                                // 첫 번째 기록 선택 (가장 최근 기록)
+                                RunningRecord mostRecentRecord = records.get(0);
                                 if (googleMap != null) {
-                                    selectedRecord = records.get(0);
+                                    selectedRecord = mostRecentRecord;
                                     updateMapForRecord(selectedRecord);
                                 }
+                                // 가장 최근 기록의 날짜 정보 업데이트
+                                updateRecentRecordDateCard(mostRecentRecord);
                             }
                             
                             if (recordAdapter != null) {
@@ -157,6 +198,17 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
                                     int insertPosition = findInsertPosition(record);
                                     records.add(insertPosition, record);
                                     Log.d("RunningRecordActivity", "기록 추가됨: " + record.getId());
+                                    
+                                    // 새로 추가된 기록이 가장 최근 기록인 경우 (맨 앞에 추가된 경우)
+                                    if (insertPosition == 0) {
+                                        selectedRecord = record;
+                                        if (googleMap != null) {
+                                            updateMapForRecord(record);
+                                        }
+                                        // 가장 최근 기록의 UI 업데이트
+                                        updateRecentRecordDateCard(record);
+                                    }
+                                    
                                     if (recordAdapter != null) {
                                         recordAdapter.notifyItemInserted(insertPosition);
                                     }
@@ -174,6 +226,10 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
                                             if (selectedRecord != null && selectedRecord.getId().equals(record.getId())) {
                                                 selectedRecord = record;
                                                 updateMapForRecord(record);
+                                                // 가장 최근 기록인 경우 날짜 카드도 업데이트
+                                                if (records.size() > 0 && records.get(0).getId().equals(record.getId())) {
+                                                    updateRecentRecordDateCard(record);
+                                                }
                                             }
                                             break;
                                         }
@@ -189,6 +245,16 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
                                             newPosition = i;
                                             break;
                                         }
+                                    }
+                                    
+                                    // 수정된 기록이 가장 최근 기록이 된 경우 UI 업데이트
+                                    if (newPosition == 0) {
+                                        selectedRecord = record;
+                                        if (googleMap != null) {
+                                            updateMapForRecord(record);
+                                        }
+                                        // 가장 최근 기록의 UI 업데이트
+                                        updateRecentRecordDateCard(record);
                                     }
                                     
                                     if (recordAdapter != null && modifyIndex >= 0) {
@@ -213,8 +279,30 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
                                         records.remove(removeIndex);
                                         Log.d("RunningRecordActivity", "기록 삭제됨: " + record.getId());
                                         
-                                        // 선택된 기록이 삭제된 경우
-                                        if (selectedRecord != null && selectedRecord.getId().equals(record.getId())) {
+                                        // 삭제된 기록이 가장 최근 기록이었던 경우 (removeIndex == 0)
+                                        if (removeIndex == 0) {
+                                            // 다음 기록으로 업데이트
+                                            if (!records.isEmpty()) {
+                                                RunningRecord newMostRecent = records.get(0);
+                                                selectedRecord = newMostRecent;
+                                                if (googleMap != null) {
+                                                    updateMapForRecord(newMostRecent);
+                                                }
+                                                // 가장 최근 기록의 UI 업데이트
+                                                updateRecentRecordDateCard(newMostRecent);
+                                            } else {
+                                                // 기록이 모두 삭제된 경우
+                                                selectedRecord = null;
+                                                if (googleMap != null) {
+                                                    googleMap.clear();
+                                                }
+                                                // 카드 숨기기
+                                                if (recentRecordDateCard != null) {
+                                                    recentRecordDateCard.setVisibility(View.GONE);
+                                                }
+                                            }
+                                        } else if (selectedRecord != null && selectedRecord.getId().equals(record.getId())) {
+                                            // 선택된 기록이 삭제된 경우 (가장 최근 기록이 아닌 경우)
                                             selectedRecord = null;
                                             if (googleMap != null) {
                                                 googleMap.clear();
@@ -223,6 +311,7 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
                                             if (!records.isEmpty()) {
                                                 selectedRecord = records.get(0);
                                                 updateMapForRecord(selectedRecord);
+                                                updateRecentRecordDateCard(selectedRecord);
                                             }
                                         }
                                         
@@ -236,15 +325,16 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
 
                         }
                         
-                        // 통계 업데이트
-                        updateStatistics();
-                        
                         // 빈 상태 처리
                         if (records.isEmpty()) {
                             selectedRecord = null;
                             if (googleMap != null) {
                                 googleMap.clear();
                             }
+                                                // 카드 숨기기
+                                                if (recentRecordDateCard != null) {
+                                                    recentRecordDateCard.setVisibility(View.GONE);
+                                                }
                             if (recordAdapter != null) {
                                 recordAdapter.notifyDataSetChanged();
                             }
@@ -253,6 +343,20 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
                             if (selectedRecord == null && googleMap != null) {
                                 selectedRecord = records.get(0);
                                 updateMapForRecord(selectedRecord);
+                                // 가장 최근 기록의 UI 업데이트
+                                updateRecentRecordDateCard(selectedRecord);
+                            } else if (selectedRecord != null && records.size() > 0) {
+                                // 가장 최근 기록이 변경되었는지 확인
+                                RunningRecord currentMostRecent = records.get(0);
+                                if (!currentMostRecent.getId().equals(selectedRecord.getId())) {
+                                    // 가장 최근 기록이 변경된 경우
+                                    selectedRecord = currentMostRecent;
+                                    if (googleMap != null) {
+                                        updateMapForRecord(selectedRecord);
+                                    }
+                                    // 가장 최근 기록의 UI 업데이트
+                                    updateRecentRecordDateCard(selectedRecord);
+                                }
                             }
                         }
                     }
@@ -413,15 +517,19 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
 
     private void initViews() {
         backButton = findViewById(R.id.backButton);
-        dateFilterButton = findViewById(R.id.btn_date_filter);
-        routeFilterButton = findViewById(R.id.btn_route_filter);
-        statisticsButton = findViewById(R.id.btn_statistics);
+        titleTextView = findViewById(R.id.tv_title);
         recordRecyclerView = findViewById(R.id.rv_running_records);
-        totalDistanceText = findViewById(R.id.tv_total_distance);
-        totalTimeText = findViewById(R.id.tv_total_time);
-        rateButton = findViewById(R.id.btn_rate);
-        shareButton = findViewById(R.id.btn_share);
         viewMoreButton = findViewById(R.id.btn_view_more);
+        tvRecentRecordYear = findViewById(R.id.tv_recent_record_year);
+        tvRecentRecordMonthDay = findViewById(R.id.tv_recent_record_month_day);
+        tvRecentRecordWeekday = findViewById(R.id.tv_recent_record_weekday);
+        recentRecordDateCard = findViewById(R.id.recent_record_card);
+        recentRecordInfoCard = findViewById(R.id.recent_record_card);
+        tvRecentRecordDistance = findViewById(R.id.tv_recent_record_distance);
+        tvRecentRecordTime = findViewById(R.id.tv_recent_record_time);
+        tvRecentRecordPace = findViewById(R.id.tv_recent_record_pace);
+        tvRecentRecordType = findViewById(R.id.tv_recent_record_type);
+        tvRecentRecordCourseName = findViewById(R.id.tv_recent_record_course_name);
     }
 
     private void setupRecyclerView() {
@@ -430,6 +538,10 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
                 // 선택된 기록의 지도 업데이트
                 selectedRecord = record;
                 updateMapForRecord(record);
+                // 가장 최근 기록인 경우 날짜 카드 업데이트
+                if (records.size() > 0 && records.get(0).getId().equals(record.getId())) {
+                    updateRecentRecordDateCard(record);
+                }
             });
             recordAdapter.setOnItemLongClickListener(record -> {
                 // 길게 누르면 삭제/수정 다이얼로그 표시
@@ -464,14 +576,144 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
     public void onMapReady(GoogleMap map) {
         googleMap = map;
 
+        // 지도 UI 설정 - 드래그 및 줌 활성화
+        map.getUiSettings().setScrollGesturesEnabled(true);
+        map.getUiSettings().setZoomGesturesEnabled(true);
+        map.getUiSettings().setZoomControlsEnabled(true);
+        map.getUiSettings().setRotateGesturesEnabled(true);
+        map.getUiSettings().setTiltGesturesEnabled(true);
+
         // 기본 위치 설정 (서울)
         LatLng seoul = new LatLng(37.5665, 126.9780);
         map.moveCamera(CameraUpdateFactory.newLatLngZoom(seoul, 15f));
 
         // 첫 번째 기록의 경로 표시
         if (!records.isEmpty()) {
-            updateMapForRecord(records.get(0));
+            RunningRecord firstRecord = records.get(0);
+            updateMapForRecord(firstRecord);
+            updateRecentRecordDateCard(firstRecord);
         }
+    }
+
+    private void updateRecentRecordDateCard(RunningRecord record) {
+        if (record == null || tvRecentRecordYear == null || tvRecentRecordMonthDay == null || tvRecentRecordWeekday == null) {
+            return;
+        }
+        
+        // 기록이 없으면 카드 숨기기
+        if (recentRecordDateCard != null && record.getCreatedAt() == 0) {
+            recentRecordDateCard.setVisibility(View.GONE);
+            return;
+        }
+        
+        // 카드 표시
+        if (recentRecordDateCard != null) {
+            recentRecordDateCard.setVisibility(View.VISIBLE);
+        }
+        
+        // 날짜 정보 파싱
+        long timestamp = record.getCreatedAt();
+        if (timestamp > 0) {
+            Calendar calendar = Calendar.getInstance();
+            calendar.setTimeInMillis(timestamp);
+            
+            int year = calendar.get(Calendar.YEAR);
+            int month = calendar.get(Calendar.MONTH) + 1; // Calendar.MONTH는 0부터 시작
+            int day = calendar.get(Calendar.DAY_OF_MONTH);
+            int dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK);
+            
+            // 요일 문자열
+            String[] weekdays = {"", "일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"};
+            String weekdayStr = weekdays[dayOfWeek];
+            
+            // TextView 업데이트
+            tvRecentRecordYear.setText(year + "년");
+            tvRecentRecordMonthDay.setText(" " + month + "월 " + day + "일");
+            tvRecentRecordWeekday.setText(" (" + weekdayStr + ")");
+        }
+        
+        // 기록 상세 정보 업데이트
+        updateRecentRecordInfo(record);
+    }
+    
+    private void updateRecentRecordInfo(RunningRecord record) {
+        if (record == null) {
+            return;
+        }
+        
+        // 거리
+        if (tvRecentRecordDistance != null) {
+            tvRecentRecordDistance.setText(record.getDistanceFormatted());
+        }
+        
+        // 시간
+        if (tvRecentRecordTime != null) {
+            String timeStr = record.getTimeFormatted();
+            // "시간: XX:XX" 형식에서 "시간: " 제거
+            if (timeStr != null && timeStr.startsWith("시간: ")) {
+                timeStr = timeStr.substring(4);
+            }
+            tvRecentRecordTime.setText(timeStr);
+        }
+        
+        // 페이스
+        if (tvRecentRecordPace != null) {
+            String paceStr = record.getPaceFormatted();
+            // "평균 페이스: X:XX/km" 형식에서 "평균 페이스: " 제거
+            if (paceStr != null && paceStr.startsWith("평균 페이스: ")) {
+                paceStr = paceStr.substring(7);
+            }
+            tvRecentRecordPace.setText(paceStr);
+        }
+        
+        // 타입
+        if (tvRecentRecordType != null) {
+            tvRecentRecordType.setText(record.getRunningType() != null ? record.getRunningType() : "일반 운동");
+        }
+        
+        // 코스 이름 (스케치 러닝인 경우)
+        if (tvRecentRecordCourseName != null) {
+            String courseId = record.getCourseId();
+            if (courseId != null && !courseId.isEmpty()) {
+                loadCourseNameAndUpdateView(courseId);
+            } else {
+                tvRecentRecordCourseName.setVisibility(View.GONE);
+            }
+        }
+    }
+    
+    private void loadCourseNameAndUpdateView(String courseId) {
+        // 캐시에서 먼저 확인
+        if (courseNameCache.containsKey(courseId)) {
+            String courseName = courseNameCache.get(courseId);
+            if (tvRecentRecordCourseName != null) {
+                tvRecentRecordCourseName.setText("📍 " + courseName);
+                tvRecentRecordCourseName.setVisibility(View.VISIBLE);
+            }
+            return;
+        }
+
+        // Firestore에서 코스 이름 가져오기
+        firestore.collection("courses")
+                .document(courseId)
+                .get()
+                .addOnSuccessListener(documentSnapshot -> {
+                    if (documentSnapshot != null && documentSnapshot.exists()) {
+                        String courseName = documentSnapshot.getString("name");
+                        if (courseName != null && !courseName.isEmpty()) {
+                            // 캐시에 저장
+                            courseNameCache.put(courseId, courseName);
+                            // UI 업데이트
+                            if (tvRecentRecordCourseName != null) {
+                                tvRecentRecordCourseName.setText("📍 " + courseName);
+                                tvRecentRecordCourseName.setVisibility(View.VISIBLE);
+                            }
+                        }
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Log.w("RunningRecordActivity", "코스 이름 로드 실패: " + courseId, e);
+                });
     }
 
     private void updateMapForRecord(RunningRecord record) {
@@ -540,54 +782,13 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
             finish();
         });
 
-        dateFilterButton.setOnClickListener(v -> {
-            // 날짜별 필터 로직
-            dateFilterButton.setSelected(true);
-            routeFilterButton.setSelected(false);
-            statisticsButton.setSelected(false);
-        });
-
-        routeFilterButton.setOnClickListener(v -> {
-            // 경로별 필터 로직
-            dateFilterButton.setSelected(false);
-            routeFilterButton.setSelected(true);
-            statisticsButton.setSelected(false);
-        });
-
-        statisticsButton.setOnClickListener(v -> {
-            // 통계 화면으로 이동
-            dateFilterButton.setSelected(false);
-            routeFilterButton.setSelected(false);
-            statisticsButton.setSelected(true);
-        });
-
-        rateButton.setOnClickListener(v -> {
-            // 별점 평가하기 로직
-        });
-
-        shareButton.setOnClickListener(v -> {
-            // 공유하기 로직
-        });
-
         viewMoreButton.setOnClickListener(v -> {
-            // 더 많은 기록 보기 로직
+            // 모든 기록 보기 Activity로 이동
+            Intent intent = new Intent(RunningRecordActivity.this, AllRecordsActivity.class);
+            startActivity(intent);
         });
     }
 
-    private void updateStatistics() {
-        // 전체 통계 계산
-        double totalDistance = 0.0;
-        long totalTimeMs = 0;
-
-        for (RunningRecord record : records) {
-            // totalDistanceKm 사용
-            totalDistance += record.getTotalDistanceKm();
-            totalTimeMs += record.getElapsedTimeMs();
-        }
-
-        totalDistanceText.setText(GoogleSignInUtils.formatDistanceKm(totalDistance));
-        totalTimeText.setText(GoogleSignInUtils.formatElapsedTimeWithLabel(totalTimeMs));
-    }
 
     private String formatLocation(double latitude, double longitude) {
         String latDirection = latitude >= 0 ? "북위" : "남위";

@@ -20,20 +20,23 @@
             app:title="코스 등록 (관리자)"
             app:titleTextColor="?attr/colorOnSurface" />
 
-        <LinearLayout
+        <GridLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_margin="16dp"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:layout_marginBottom="8dp">
+            android:columnCount="2"
+            android:rowCount="2"
+            android:alignmentMode="alignMargins"
+            android:columnOrderPreserved="false"
+            android:useDefaultMargins="false"
+            android:layout_marginBottom="16dp">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/import_seoul_courses_button"
                 android:layout_width="0dp"
                 android:layout_height="64dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="8dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="8dp"
                 android:text="코스 일괄 업로드"
                 android:textSize="18sp"
                 android:textStyle="bold"
@@ -46,8 +49,8 @@
                 android:id="@+id/clear_firestore_button"
                 android:layout_width="0dp"
                 android:layout_height="64dp"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="8dp"
                 android:text="데이터 비우기"
                 android:textSize="18sp"
                 android:textStyle="bold"
@@ -56,36 +59,35 @@
                 app:backgroundTint="#DC3545"
                 app:elevation="8dp" />
 
-        </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/upload_gyeongbokgung_run_button"
+                android:layout_width="0dp"
+                android:layout_height="64dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="8dp"
+                android:text="경복궁 데이터 업로드"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textAllCaps="false"
+                app:cornerRadius="32dp"
+                app:backgroundTint="#28A745"
+                app:elevation="8dp" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/upload_gyeongbokgung_run_button"
-            android:layout_width="match_parent"
-            android:layout_height="64dp"
-            android:layout_marginHorizontal="16dp"
-            android:layout_marginTop="8dp"
-            android:text="경복궁 데이터 업로드"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:textAllCaps="false"
-            app:cornerRadius="32dp"
-            app:backgroundTint="#28A745"
-            app:elevation="8dp" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/clear_gyeongbokgung_button"
+                android:layout_width="0dp"
+                android:layout_height="64dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="8dp"
+                android:text="경복궁 데이터 비우기"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textAllCaps="false"
+                app:cornerRadius="32dp"
+                app:backgroundTint="#DC3545"
+                app:elevation="8dp" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/clear_gyeongbokgung_button"
-            android:layout_width="match_parent"
-            android:layout_height="64dp"
-            android:layout_marginHorizontal="16dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="16dp"
-            android:text="경복궁 데이터 비우기"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:textAllCaps="false"
-            app:cornerRadius="32dp"
-            app:backgroundTint="#DC3545"
-            app:elevation="8dp" />
+        </GridLayout>
 
     </com.google.android.material.appbar.AppBarLayout>
 
