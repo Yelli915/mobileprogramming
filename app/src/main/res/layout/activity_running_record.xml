@@ -220,6 +220,8 @@
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="300dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
             android:layout_marginBottom="16dp"
             android:background="@android:color/darker_gray">
 
@@ -236,6 +238,8 @@
             android:id="@+id/recent_record_card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
             android:layout_marginBottom="16dp"
             app:cardCornerRadius="16dp"
             app:cardElevation="4dp"
@@ -471,6 +475,9 @@
         <Button
             android:id="@+id/btn_view_more"
             style="@style/ButtonPrimary"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="16dp"
             android:text="더 많은 기록 보기" />
 
     </LinearLayout>
