@@ -24,9 +24,9 @@ public class OnboardingAdapter extends RecyclerView.Adapter<OnboardingAdapter.Sl
     }
 
     private final Slide[] slides = new Slide[]{
-            new Slide(R.drawable.ic_onboarding_sketch, "러닝을 스케치하세요", "원하는 코스를 직접 그려서\n나만의 러닝 경로를 만들어보세요"),
+            new Slide(R.drawable.ic_onboarding_sketch, "스케치 러닝", "다양한 코스를 선택하고\n지도에서 경로를 미리 확인하세요"),
             new Slide(R.drawable.ic_onboarding_record, "기록을 한눈에", "운동 기록을 자동으로 저장하고\n통계로 확인하세요"),
-            new Slide(R.drawable.ic_onboarding_share, "친구와 공유", "나만의 코스를 공유하고\n다른 러너들과 함께 즐기세요")
+            new Slide(R.drawable.ic_onboarding_share, "코스 탐색", "난이도별로 코스를 탐색하고\n나에게 맞는 코스를 찾아보세요")
     };
 
     @NonNull

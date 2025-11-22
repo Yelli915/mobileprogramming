@@ -311,6 +311,9 @@ public class SketchRunActivity extends AppCompatActivity implements OnMapReadyCa
         map = googleMap;
         map.getUiSettings().setZoomControlsEnabled(true);
         map.getUiSettings().setScrollGesturesEnabled(true);
+        map.getUiSettings().setZoomGesturesEnabled(true);
+        map.getUiSettings().setRotateGesturesEnabled(true);
+        map.getUiSettings().setTiltGesturesEnabled(true);
         
         if (selectedCourse != null) {
             displayCoursePathOnMap(selectedCourse);
@@ -354,7 +357,7 @@ public class SketchRunActivity extends AppCompatActivity implements OnMapReadyCa
                 LatLngBounds bounds = boundsBuilder.build();
                 
                 int padding = 50;
-                map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, padding));
+                map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, padding));
                 
                 Log.d("SketchRunActivity", "코스 경로 지도에 표시 완료: " + course.getName() + " (" + coursePoints.size() + "개 좌표)");
             }

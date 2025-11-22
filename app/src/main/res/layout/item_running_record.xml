@@ -17,6 +17,18 @@
         android:orientation="vertical"
         android:padding="20dp">
 
+        <!-- 기록 이름 (있는 경우) -->
+        <TextView
+            android:id="@+id/tv_record_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="아침 러닝"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#FF6B35"
+            android:visibility="gone"
+            android:layout_marginBottom="8dp" />
+
         <!-- 상단: 날짜와 타입 -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -35,6 +47,23 @@
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnSurface" />
+
+            <!-- 난이도 배지 -->
+            <TextView
+                android:id="@+id/tv_record_difficulty"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="보통"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:background="@drawable/badge_background"
+                android:textColor="#FFFFFF"
+                android:visibility="gone"
+                android:layout_marginEnd="8dp" />
 
             <!-- 러닝 타입 배지 -->
             <TextView

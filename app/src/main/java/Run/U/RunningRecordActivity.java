@@ -45,6 +45,7 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
     private TextView tvRecentRecordWeekday;
     private androidx.cardview.widget.CardView recentRecordDateCard;
     private androidx.cardview.widget.CardView recentRecordInfoCard;
+    private TextView tvRecentRecordName;
     private TextView tvRecentRecordDistance;
     private TextView tvRecentRecordTime;
     private TextView tvRecentRecordPace;
@@ -494,6 +495,16 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
                 record.setCourseId(document.getString("courseId"));
             }
             
+            // name (기록 이름)
+            if (document.contains("name")) {
+                record.setName(document.getString("name"));
+            }
+            
+            // difficulty (난이도)
+            if (document.contains("difficulty")) {
+                record.setDifficulty(document.getString("difficulty"));
+            }
+            
             // createdAt
             if (document.contains("createdAt")) {
                 Object createdAt = document.get("createdAt");
@@ -525,6 +536,7 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
         tvRecentRecordWeekday = findViewById(R.id.tv_recent_record_weekday);
         recentRecordDateCard = findViewById(R.id.recent_record_card);
         recentRecordInfoCard = findViewById(R.id.recent_record_card);
+        tvRecentRecordName = findViewById(R.id.tv_recent_record_name);
         tvRecentRecordDistance = findViewById(R.id.tv_recent_record_distance);
         tvRecentRecordTime = findViewById(R.id.tv_recent_record_time);
         tvRecentRecordPace = findViewById(R.id.tv_recent_record_pace);
@@ -641,6 +653,17 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
             return;
         }
         
+        // 기록 이름
+        if (tvRecentRecordName != null) {
+            String name = record.getName();
+            if (name != null && !name.trim().isEmpty()) {
+                tvRecentRecordName.setText(name);
+                tvRecentRecordName.setVisibility(View.VISIBLE);
+            } else {
+                tvRecentRecordName.setVisibility(View.GONE);
+            }
+        }
+        
         // 거리
         if (tvRecentRecordDistance != null) {
             tvRecentRecordDistance.setText(record.getDistanceFormatted());
@@ -745,20 +768,16 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
 
             // 시작 지점 마커
             LatLng startPoint = routePoints.get(0);
-            String startLocationInfo = formatLocation(startPoint.latitude, startPoint.longitude);
             googleMap.addMarker(new MarkerOptions()
                     .position(startPoint)
-                    .title("시작")
-                    .snippet(startLocationInfo));
+                    .title("시작"));
 
             // 종료 지점 마커
             if (routePoints.size() > 1) {
                 LatLng endPoint = routePoints.get(routePoints.size() - 1);
-                String endLocationInfo = formatLocation(endPoint.latitude, endPoint.longitude);
                 googleMap.addMarker(new MarkerOptions()
                         .position(endPoint)
-                        .title("종료")
-                        .snippet(endLocationInfo));
+                        .title("끝"));
             }
 
             // 경로가 모두 보이도록 카메라 조정
