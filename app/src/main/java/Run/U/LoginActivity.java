@@ -239,21 +239,19 @@ public class LoginActivity extends AppCompatActivity {
             return;
         }
 
-        // Intent 생성과 launch를 즉시 실행 (Google SDK가 내부적으로 최적화되어 있음)
         try {
             Intent signInIntent = googleSignInClient.getSignInIntent();
             if (signInIntent != null) {
-                // 즉시 launch하여 UI 응답성 향상
                 googleSignInLauncher.launch(signInIntent);
             } else {
                 Log.e(TAG, "Google 로그인 Intent를 생성할 수 없습니다.");
-                GoogleSignInUtils.showToast(this, "로그인 설정 오류가 발생했습니다.");
                 setSigningInState(false);
+                GoogleSignInUtils.showToast(this, "로그인 설정 오류가 발생했습니다.");
             }
         } catch (Exception e) {
             Log.e(TAG, "Google 로그인 시작 중 오류 발생", e);
-            GoogleSignInUtils.showToast(this, "로그인 시작 중 오류가 발생했습니다.");
             setSigningInState(false);
+            GoogleSignInUtils.showToast(this, "로그인 시작 중 오류가 발생했습니다.");
         }
     }
 
@@ -284,13 +282,9 @@ public class LoginActivity extends AppCompatActivity {
             return;
         }
 
-        // Task가 완료된 경우 처리
-        if (task.isComplete()) {
-            handleSignInTask(task);
-        } else {
-            // Task가 아직 완료되지 않은 경우 완료 대기
-            task.addOnCompleteListener(this::handleSignInTask);
-        }
+        // GoogleSignIn.getSignedInAccountFromIntent()는 보통 즉시 완료되므로
+        // addOnCompleteListener로 통일하여 처리
+        task.addOnCompleteListener(this::handleSignInTask);
     }
 
     private void handleSignInTask(Task<GoogleSignInAccount> task) {
@@ -351,9 +345,12 @@ public class LoginActivity extends AppCompatActivity {
         }
 
         try {
+            // GoogleAuthProvider.getCredential의 두 번째 파라미터는 accessToken으로,
+            // Google Sign-In에서는 idToken만으로 충분하므로 null 사용
             AuthCredential credential = GoogleAuthProvider.getCredential(idToken, null);
             if (credential == null) {
                 Log.e(TAG, "AuthCredential을 생성할 수 없습니다.");
+                setSigningInState(false);
                 GoogleSignInUtils.showToast(this, R.string.sign_in_failed);
                 return;
             }
@@ -363,13 +360,11 @@ public class LoginActivity extends AppCompatActivity {
                         @Override
                         public void onComplete(@NonNull Task<AuthResult> task) {
                             if (task.isSuccessful()) {
-                                // AuthResult에서 직접 사용자 가져오기 (getCurrentUser()는 때로 null 반환 가능)
                                 AuthResult result = task.getResult();
                                 FirebaseUser user = result != null ? result.getUser() : null;
                                 
                                 if (user == null) {
-                                    // AuthResult에서 가져오기 실패 시 getCurrentUser() 재시도
-                                    user = firebaseAuth.getCurrentUser();
+                                    user = GoogleSignInUtils.getCurrentUser();
                                 }
                                 
                                 if (user != null) {
@@ -430,12 +425,17 @@ public class LoginActivity extends AppCompatActivity {
             return;
         }
 
-        // 즉시 MainActivity로 이동하고, Firestore 업데이트는 백그라운드에서 처리
         navigateToMainActivity(true);
 
         // Firestore 업데이트는 백그라운드에서 비동기로 처리
         DocumentReference userRef = firebaseFirestore.collection("users").document(uid);
         userRef.get().addOnCompleteListener(task -> {
+            // Activity가 종료되었는지 확인
+            if (isFinishing() || isDestroyed()) {
+                Log.d(TAG, "Activity가 종료되어 Firestore 업데이트를 건너뜁니다.");
+                return;
+            }
+            
             if (task.isSuccessful()) {
                 DocumentSnapshot document = task.getResult();
                 if (document != null && document.exists()) {
@@ -447,7 +447,6 @@ public class LoginActivity extends AppCompatActivity {
                 }
             } else {
                 Log.w(TAG, "Firestore 문서 조회 실패", task.getException());
-                // 조회 실패는 조용히 처리 (이미 화면 전환됨)
             }
         });
     }
@@ -470,6 +469,12 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     private void updateExistingUserInBackground(DocumentReference userRef, FirebaseUser user) {
+        // Activity가 종료되었는지 확인
+        if (isFinishing() || isDestroyed()) {
+            Log.d(TAG, "Activity가 종료되어 사용자 업데이트를 건너뜁니다.");
+            return;
+        }
+        
         Map<String, Object> updates = extractUserData(user);
         // email은 업데이트에서 제외
         updates.remove("email");
@@ -477,11 +482,14 @@ public class LoginActivity extends AppCompatActivity {
         if (!updates.isEmpty()) {
             userRef.update(updates)
                     .addOnSuccessListener(unused -> {
-                        Log.d(TAG, "사용자 정보 업데이트 성공");
+                        if (!isFinishing() && !isDestroyed()) {
+                            Log.d(TAG, "사용자 정보 업데이트 성공");
+                        }
                     })
                     .addOnFailureListener(e -> {
-                        Log.w(TAG, "사용자 정보 업데이트 실패", e);
-                        // 백그라운드 업데이트 실패는 조용히 처리
+                        if (!isFinishing() && !isDestroyed()) {
+                            Log.w(TAG, "사용자 정보 업데이트 실패", e);
+                        }
                     });
         } else {
             Log.d(TAG, "업데이트할 내용이 없습니다.");
@@ -489,17 +497,26 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     private void createNewUserInBackground(DocumentReference userRef, FirebaseUser user) {
+        // Activity가 종료되었는지 확인
+        if (isFinishing() || isDestroyed()) {
+            Log.d(TAG, "Activity가 종료되어 신규 사용자 생성을 건너뜁니다.");
+            return;
+        }
+        
         Map<String, Object> newUser = extractUserData(user);
         newUser.put("role", "user");
         newUser.put("createdAt", FieldValue.serverTimestamp());
 
         userRef.set(newUser)
                 .addOnSuccessListener(unused -> {
-                    Log.d(TAG, "신규 사용자 정보 Firestore에 저장 성공");
+                    if (!isFinishing() && !isDestroyed()) {
+                        Log.d(TAG, "신규 사용자 정보 Firestore에 저장 성공");
+                    }
                 })
                 .addOnFailureListener(e -> {
-                    Log.w(TAG, "신규 사용자 정보 저장 실패", e);
-                    // 백그라운드 저장 실패는 조용히 처리
+                    if (!isFinishing() && !isDestroyed()) {
+                        Log.w(TAG, "신규 사용자 정보 저장 실패", e);
+                    }
                 });
     }
 
