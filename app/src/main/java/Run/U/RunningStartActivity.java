@@ -66,6 +66,8 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
     private static final long LOCATION_UPDATE_INTERVAL = 2000L;
     private static final float GUIDE_POINT_THRESHOLD = 20.0f;  // 도착 감지: 20m
     private static final int PRE_ANNOUNCE_SECONDS = 10;  // 10초 전 사전 안내
+    private static final float COURSE_DEVIATION_THRESHOLD = 100.0f;  // 경로 이탈 판정: 100m
+    private static final long DEVIATION_ALERT_COOLDOWN = 10000L;  // 이탈 알림 쿨다운: 10초
 
     private GoogleMap map;
     private FusedLocationProviderClient fusedLocationClient;
@@ -133,6 +135,11 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
     private List<GuidePoint> guidePoints = new ArrayList<>();
     private Set<String> announcedGuidePoints = new HashSet<>();
     private Set<String> preAnnouncedGuidePoints = new HashSet<>();  // 사전 안내 추적
+
+    // 경로 이탈 감지 관련 변수
+    private List<LatLng> coursePathPoints = new ArrayList<>();  // 디코딩된 코스 경로 좌표
+    private boolean isDeviated = false;  // 현재 이탈 상태
+    private long lastDeviationAlertTime = 0;  // 마지막 이탈 알림 시간
 
     private static class TimerRunnable implements Runnable {
         private final WeakReference<RunningStartActivity> activityRef;
@@ -233,6 +240,11 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                         // 러닝 중일 때는 거리 업데이트
                         if (isRunning && !isPaused) {
                             updateDistance(location);
+                            // 스케치런 모드일 때 가이드 포인트 및 경로 이탈 체크
+                            if (courseId != null) {
+                                checkGuidePoints(location);
+                                checkCourseDeviation(location);
+                            }
                         } else {
                             // 러닝 시작 전에도 지도에 현재 위치 실시간 반영
                             updateMapLocation(location);
@@ -537,6 +549,199 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
 
         GoogleSignInUtils.showToast(this, message);
         speak(message);
+    }
+
+    // 점과 Polyline 간 최단 거리 계산 (미터 단위)
+    private float calculateDistanceToPolyline(LatLng point, List<LatLng> polyline) {
+        if (polyline == null || polyline.isEmpty()) {
+            return Float.MAX_VALUE;
+        }
+
+        float minDistance = Float.MAX_VALUE;
+
+        // Polyline의 각 선분에 대해 최단 거리 계산
+        for (int i = 0; i < polyline.size() - 1; i++) {
+            LatLng p1 = polyline.get(i);
+            LatLng p2 = polyline.get(i + 1);
+
+            // 점에서 선분까지의 거리 계산
+            float distance = distanceToLineSegment(point, p1, p2);
+            if (distance < minDistance) {
+                minDistance = distance;
+            }
+        }
+
+        return minDistance;
+    }
+
+    // 점에서 선분까지의 최단 거리 계산 (Haversine 공식 사용)
+    private float distanceToLineSegment(LatLng point, LatLng lineStart, LatLng lineEnd) {
+        // 선분의 시작점과 끝점까지의 거리
+        float[] results1 = new float[1];
+        Location.distanceBetween(
+                point.latitude, point.longitude,
+                lineStart.latitude, lineStart.longitude,
+                results1
+        );
+        float distToStart = results1[0];
+
+        float[] results2 = new float[1];
+        Location.distanceBetween(
+                point.latitude, point.longitude,
+                lineEnd.latitude, lineEnd.longitude,
+                results2
+        );
+        float distToEnd = results2[0];
+
+        // 선분의 길이
+        float[] results3 = new float[1];
+        Location.distanceBetween(
+                lineStart.latitude, lineStart.longitude,
+                lineEnd.latitude, lineEnd.longitude,
+                results3
+        );
+        float lineLength = results3[0];
+
+        if (lineLength < 0.1f) {
+            // 선분이 너무 짧으면 시작점까지의 거리 반환
+            return distToStart;
+        }
+
+        // 점이 선분의 양 끝점 중 하나에 가까운 경우
+        if (distToStart < distToEnd && distToStart < 5.0f) {
+            return distToStart;
+        }
+        if (distToEnd < distToStart && distToEnd < 5.0f) {
+            return distToEnd;
+        }
+
+        // 선분에 수직인 점까지의 거리 계산 (근사치)
+        // 벡터 내적을 사용한 투영 계산
+        double lat1 = Math.toRadians(lineStart.latitude);
+        double lon1 = Math.toRadians(lineStart.longitude);
+        double lat2 = Math.toRadians(lineEnd.latitude);
+        double lon2 = Math.toRadians(lineEnd.longitude);
+        double latP = Math.toRadians(point.latitude);
+        double lonP = Math.toRadians(point.longitude);
+
+        // 선분의 단위 벡터
+        double dx = lat2 - lat1;
+        double dy = lon2 - lon1;
+        double lineLen = Math.sqrt(dx * dx + dy * dy);
+        if (lineLen < 1e-10) {
+            return distToStart;
+        }
+
+        // 점에서 선분 시작점까지의 벡터
+        double px = latP - lat1;
+        double py = lonP - lon1;
+
+        // 투영 계수
+        double t = (px * dx + py * dy) / (lineLen * lineLen);
+        t = Math.max(0, Math.min(1, t)); // 선분 내로 제한
+
+        // 투영된 점
+        double projLat = lat1 + t * dx;
+        double projLon = lon1 + t * dy;
+
+        // 투영된 점까지의 거리
+        float[] results = new float[1];
+        Location.distanceBetween(
+                Math.toDegrees(projLat), Math.toDegrees(projLon),
+                point.latitude, point.longitude,
+                results
+        );
+
+        return results[0];
+    }
+
+    // 경로 이탈 감지 및 알림
+    private void checkCourseDeviation(Location currentLocation) {
+        // 스케치런 모드가 아니거나 코스 경로가 없으면 체크하지 않음
+        if (courseId == null || coursePathEncoded == null || coursePathEncoded.isEmpty()) {
+            return;
+        }
+
+        if (coursePathPoints.isEmpty()) {
+            return;
+        }
+
+        LatLng currentLatLng = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
+
+        // 현재 위치에서 코스 경로까지의 최단 거리 계산
+        float distanceToCourse = calculateDistanceToPolyline(currentLatLng, coursePathPoints);
+
+        boolean currentlyDeviated = distanceToCourse > COURSE_DEVIATION_THRESHOLD;
+
+        // 이탈 상태 변화 감지
+        if (currentlyDeviated && !isDeviated) {
+            // 이탈 시작
+            isDeviated = true;
+            long currentTime = System.currentTimeMillis();
+
+            // 쿨다운 체크 (너무 자주 알림이 나오지 않도록)
+            if (currentTime - lastDeviationAlertTime > DEVIATION_ALERT_COOLDOWN) {
+                notifyCourseDeviation(distanceToCourse);
+                lastDeviationAlertTime = currentTime;
+            }
+        } else if (!currentlyDeviated && isDeviated) {
+            // 경로 복귀
+            isDeviated = false;
+            long currentTime = System.currentTimeMillis();
+
+            if (currentTime - lastDeviationAlertTime > DEVIATION_ALERT_COOLDOWN) {
+                notifyCourseReturn();
+                lastDeviationAlertTime = currentTime;
+            }
+        }
+
+        // 디버그 로그 (5초마다)
+        if (System.currentTimeMillis() % 5000 < 1000) {
+            Log.d("CourseDeviation", 
+                    "코스까지 거리: " + String.format("%.1f", distanceToCourse) + "m, " +
+                    "이탈 상태: " + (isDeviated ? "이탈" : "정상"));
+        }
+    }
+
+    // 경로 이탈 알림
+    private void notifyCourseDeviation(float distance) {
+        String message = String.format(Locale.getDefault(), 
+                "경로에서 이탈했습니다. 코스까지 약 %.0f미터입니다.", distance);
+
+        Log.w("CourseDeviation", message);
+
+        // TTS 음성 알림
+        speak(message);
+
+        // 진동 알림
+        vibrate();
+
+        // 토스트 메시지
+        GoogleSignInUtils.showToast(this, "경로 이탈");
+    }
+
+    // 경로 복귀 알림
+    private void notifyCourseReturn() {
+        String message = "경로로 복귀했습니다.";
+
+        Log.d("CourseDeviation", message);
+
+        // TTS 음성 알림
+        speak(message);
+    }
+
+    // 진동 알림
+    private void vibrate() {
+        try {
+            android.os.Vibrator vibrator = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
+            if (vibrator != null && vibrator.hasVibrator()) {
+                // 짧은 진동 패턴 (200ms 진동, 100ms 대기, 200ms 진동)
+                long[] pattern = {0, 200, 100, 200};
+                vibrator.vibrate(pattern, -1);
+            }
+        } catch (Exception e) {
+            Log.w("RunningStartActivity", "진동 알림 실패", e);
+        }
     }
 
     // UI 상태 업데이트 메서드
@@ -1055,6 +1260,10 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                 lastLocation = null;
                 routePoints.clear(); // 경로 초기화
                 
+                // 이탈 감지 상태 초기화
+                isDeviated = false;
+                lastDeviationAlertTime = 0;
+                
                 // 기존 마커와 Polyline 제거
                 if (startLocationMarker != null) {
                     startLocationMarker.remove();
@@ -1287,6 +1496,10 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
             }
             
             Log.d("RunningStartActivity", "코스 경로 디코딩 완료: " + coursePoints.size() + "개 좌표");
+            
+            // 이탈 감지를 위해 경로 좌표 저장
+            coursePathPoints.clear();
+            coursePathPoints.addAll(coursePoints);
             
             PolylineOptions coursePolylineOptions = new PolylineOptions()
                     .addAll(coursePoints)
