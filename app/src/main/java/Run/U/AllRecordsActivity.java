@@ -359,6 +359,14 @@ public class AllRecordsActivity extends AppCompatActivity {
                 }
             }
             
+            if (document.contains("name")) {
+                record.setName(document.getString("name"));
+            }
+            
+            if (document.contains("difficulty")) {
+                record.setDifficulty(document.getString("difficulty"));
+            }
+            
             return record;
         } catch (Exception e) {
             Log.e("AllRecordsActivity", "기록 변환 실패", e);
@@ -371,32 +379,56 @@ public class AllRecordsActivity extends AppCompatActivity {
 
         dateFilterButton.setOnClickListener(v -> {
             if (dateFilterButton == null) return;
-            currentFilter = "date";
-            // 버튼이 사라지지 않도록 보장
-            dateFilterButton.setVisibility(View.VISIBLE);
-            dateFilterButton.setEnabled(true);
-            updateFilterButtons();
-            showDateFilterDialog();
+            // 이미 선택된 버튼이면 토글하여 해제
+            if ("date".equals(currentFilter)) {
+                currentFilter = "all";
+                selectedStartDate = null;
+                selectedEndDate = null;
+                updateFilterButtons();
+                applyCurrentFilter();
+            } else {
+                currentFilter = "date";
+                // 버튼이 사라지지 않도록 보장
+                dateFilterButton.setVisibility(View.VISIBLE);
+                dateFilterButton.setEnabled(true);
+                updateFilterButtons();
+                showDateFilterDialog();
+            }
         });
 
         routeFilterButton.setOnClickListener(v -> {
             if (routeFilterButton == null) return;
-            currentFilter = "difficulty";
-            // 버튼이 사라지지 않도록 보장
-            routeFilterButton.setVisibility(View.VISIBLE);
-            routeFilterButton.setEnabled(true);
-            updateFilterButtons();
-            showDifficultyFilterDialog();
+            // 이미 선택된 버튼이면 토글하여 해제
+            if ("difficulty".equals(currentFilter)) {
+                currentFilter = "all";
+                selectedDifficulty = null;
+                updateFilterButtons();
+                applyCurrentFilter();
+            } else {
+                currentFilter = "difficulty";
+                // 버튼이 사라지지 않도록 보장
+                routeFilterButton.setVisibility(View.VISIBLE);
+                routeFilterButton.setEnabled(true);
+                updateFilterButtons();
+                showDifficultyFilterDialog();
+            }
         });
 
         statisticsButton.setOnClickListener(v -> {
             if (statisticsButton == null) return;
-            currentFilter = "statistics";
-            // 버튼이 사라지지 않도록 보장
-            statisticsButton.setVisibility(View.VISIBLE);
-            statisticsButton.setEnabled(true);
-            updateFilterButtons();
-            showStatisticsView();
+            // 이미 선택된 버튼이면 토글하여 해제
+            if ("statistics".equals(currentFilter)) {
+                currentFilter = "all";
+                updateFilterButtons();
+                applyCurrentFilter();
+            } else {
+                currentFilter = "statistics";
+                // 버튼이 사라지지 않도록 보장
+                statisticsButton.setVisibility(View.VISIBLE);
+                statisticsButton.setEnabled(true);
+                updateFilterButtons();
+                showStatisticsView();
+            }
         });
     }
 
@@ -708,12 +740,20 @@ public class AllRecordsActivity extends AppCompatActivity {
     private void applyDifficultyFilter() {
         filteredRecords.clear();
         for (RunningRecord record : allRecords) {
-            String courseId = record.getCourseId();
-            if (courseId != null && courseIdToDifficulty.containsKey(courseId)) {
-                String recordDifficulty = courseIdToDifficulty.get(courseId);
-                if (selectedDifficulty.equals(recordDifficulty)) {
-                    filteredRecords.add(record);
+            String recordDifficulty = record.getDifficulty();
+            
+            // 기록에 난이도가 설정되어 있으면 그것을 사용
+            if (recordDifficulty == null || recordDifficulty.isEmpty()) {
+                // 기록에 난이도가 없으면 코스의 난이도 사용
+                String courseId = record.getCourseId();
+                if (courseId != null && courseIdToDifficulty.containsKey(courseId)) {
+                    recordDifficulty = courseIdToDifficulty.get(courseId);
                 }
+            }
+            
+            // 선택된 난이도와 일치하면 필터에 추가
+            if (recordDifficulty != null && selectedDifficulty.equals(recordDifficulty)) {
+                filteredRecords.add(record);
             }
         }
         
@@ -854,122 +894,329 @@ public class AllRecordsActivity extends AppCompatActivity {
         String userId = currentUser.getUid();
         String documentId = record.getId();
 
-        new AlertDialog.Builder(this)
-                .setTitle("기록 관리")
-                .setMessage(String.format("거리: %s\n시간: %s\n페이스: %s", 
-                        record.getDistanceFormatted(), 
-                        record.getTimeFormatted(), 
-                        record.getPaceFormatted()))
-                .setItems(new String[]{"수정", "삭제"}, (dialog, which) -> {
-                    if (which == 0) {
-                        showEditRunRecordDialog(documentId, userId, record);
-                    } else if (which == 1) {
-                        showDeleteConfirmDialog(documentId, userId);
-                    }
-                })
-                .setNegativeButton("취소", null)
-                .show();
+        android.view.LayoutInflater inflater = getLayoutInflater();
+        android.view.View dialogView = inflater.inflate(R.layout.dialog_record_detail, null);
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setView(dialogView);
+
+        // 뷰 초기화
+        android.view.View nameContainer = dialogView.findViewById(R.id.name_container);
+        TextView nameText = dialogView.findViewById(R.id.tv_record_detail_name);
+        TextView dateText = dialogView.findViewById(R.id.tv_record_detail_date);
+        TextView typeText = dialogView.findViewById(R.id.tv_record_detail_type);
+        android.view.View difficultyContainer = dialogView.findViewById(R.id.difficulty_container);
+        TextView difficultyText = dialogView.findViewById(R.id.tv_record_detail_difficulty);
+        android.view.View courseContainer = dialogView.findViewById(R.id.course_container);
+        TextView courseText = dialogView.findViewById(R.id.tv_record_detail_course);
+        TextView distanceText = dialogView.findViewById(R.id.tv_record_detail_distance);
+        TextView timeText = dialogView.findViewById(R.id.tv_record_detail_time);
+        TextView paceText = dialogView.findViewById(R.id.tv_record_detail_pace);
+        com.google.android.material.button.MaterialButton editButton = dialogView.findViewById(R.id.btn_edit_record);
+        com.google.android.material.button.MaterialButton deleteButton = dialogView.findViewById(R.id.btn_delete_record);
+        android.widget.ImageButton cancelButton = dialogView.findViewById(R.id.btn_cancel_record);
+
+        // 기록 이름 설정
+        String name = record.getName();
+        if (name != null && !name.trim().isEmpty()) {
+            nameText.setText(name);
+            nameContainer.setVisibility(android.view.View.VISIBLE);
+        } else {
+            nameContainer.setVisibility(android.view.View.GONE);
+        }
+
+        // 날짜 설정
+        if (dateText != null) {
+            dateText.setText(record.getDate());
+        }
+
+        // 러닝 타입 설정
+        if (typeText != null) {
+            String runningType = record.getRunningType();
+            typeText.setText(runningType != null ? runningType : "일반 운동");
+        }
+
+        // 난이도 설정
+        String difficulty = record.getDifficulty();
+        if (difficulty != null && !difficulty.isEmpty()) {
+            String difficultyDisplay = record.getDifficultyDisplayName();
+            if (difficultyText != null) {
+                difficultyText.setText(difficultyDisplay);
+            }
+            if (difficultyContainer != null) {
+                difficultyContainer.setVisibility(android.view.View.VISIBLE);
+            }
+        } else {
+            if (difficultyContainer != null) {
+                difficultyContainer.setVisibility(android.view.View.GONE);
+            }
+        }
+
+        // 코스 이름 설정
+        String courseId = record.getCourseId();
+        if (courseId != null && !courseId.isEmpty()) {
+            String courseName = courseNameCache != null ? courseNameCache.get(courseId) : null;
+            if (courseName != null && !courseName.isEmpty()) {
+                courseText.setText("📍 " + courseName);
+                courseContainer.setVisibility(android.view.View.VISIBLE);
+            } else {
+                // 코스 이름이 캐시에 없으면 로드 시도
+                courseContainer.setVisibility(android.view.View.GONE);
+                firestore.collection("courses")
+                        .document(courseId)
+                        .get()
+                        .addOnSuccessListener(documentSnapshot -> {
+                            if (documentSnapshot != null && documentSnapshot.exists()) {
+                                String loadedCourseName = documentSnapshot.getString("name");
+                                if (loadedCourseName != null && !loadedCourseName.isEmpty()) {
+                                    courseText.setText("📍 " + loadedCourseName);
+                                    courseContainer.setVisibility(android.view.View.VISIBLE);
+                                    // 캐시에 저장
+                                    if (courseNameCache != null) {
+                                        courseNameCache.put(courseId, loadedCourseName);
+                                    }
+                                }
+                            }
+                        })
+                        .addOnFailureListener(e -> {
+                            Log.w("AllRecordsActivity", "코스 이름 로드 실패: " + courseId, e);
+                        });
+            }
+        } else {
+            courseContainer.setVisibility(android.view.View.GONE);
+        }
+
+        // 거리 설정
+        if (distanceText != null) {
+            distanceText.setText(record.getDistanceFormatted());
+        }
+
+        // 시간 설정
+        if (timeText != null) {
+            String timeStr = record.getTimeFormatted();
+            if (timeStr != null && timeStr.startsWith("시간: ")) {
+                timeStr = timeStr.substring(4);
+            }
+            timeText.setText(timeStr);
+        }
+
+        // 페이스 설정
+        if (paceText != null) {
+            String paceStr = record.getPaceFormatted();
+            if (paceStr != null && paceStr.startsWith("평균 페이스: ")) {
+                paceStr = paceStr.substring(7);
+            }
+            paceText.setText(paceStr);
+        }
+
+        AlertDialog dialog = builder.create();
+        dialog.setCancelable(true);
+
+        // 수정 버튼 클릭
+        editButton.setOnClickListener(v -> {
+            dialog.dismiss();
+            showEditRunRecordDialog(documentId, userId, record);
+        });
+
+        // 삭제 버튼 클릭
+        deleteButton.setOnClickListener(v -> {
+            dialog.dismiss();
+            showDeleteConfirmDialog(documentId, userId);
+        });
+
+        // 취소 버튼 클릭
+        cancelButton.setOnClickListener(v -> dialog.dismiss());
+
+        dialog.show();
     }
 
     private void showEditRunRecordDialog(String documentId, String userId, RunningRecord record) {
-        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
-        builder.setTitle("기록 수정");
+        android.view.LayoutInflater inflater = getLayoutInflater();
+        android.view.View dialogView = inflater.inflate(R.layout.dialog_edit_record, null);
 
-        android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
-        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
-        layout.setPadding(50, 40, 50, 10);
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setView(dialogView);
 
-        android.widget.TextView distanceLabel = new android.widget.TextView(this);
-        distanceLabel.setText("거리 (km):");
-        distanceLabel.setTextSize(14);
-        layout.addView(distanceLabel);
+        // 뷰 초기화
+        com.google.android.material.textfield.TextInputEditText nameEdit = dialogView.findViewById(R.id.et_record_name);
+        com.google.android.material.textfield.TextInputEditText distanceEdit = dialogView.findViewById(R.id.et_record_distance);
+        com.google.android.material.textfield.TextInputEditText timeEdit = dialogView.findViewById(R.id.et_record_time);
+        com.google.android.material.button.MaterialButton easyButton = dialogView.findViewById(R.id.btn_difficulty_easy);
+        com.google.android.material.button.MaterialButton mediumButton = dialogView.findViewById(R.id.btn_difficulty_medium);
+        com.google.android.material.button.MaterialButton hardButton = dialogView.findViewById(R.id.btn_difficulty_hard);
+        android.widget.ImageButton cancelButton = dialogView.findViewById(R.id.btn_cancel_edit);
+        com.google.android.material.button.MaterialButton cancelBottomButton = dialogView.findViewById(R.id.btn_cancel_edit_bottom);
+        com.google.android.material.button.MaterialButton saveButton = dialogView.findViewById(R.id.btn_save_record);
 
-        android.widget.EditText distanceEdit = new android.widget.EditText(this);
-        distanceEdit.setText(String.format("%.2f", record.getTotalDistanceKm()));
-        distanceEdit.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        layout.addView(distanceEdit);
+        // 난이도 선택 변수
+        final String[] selectedDifficulty = {record.getDifficulty()};
 
-        android.widget.TextView timeLabel = new android.widget.TextView(this);
-        timeLabel.setText("시간 (분:초):");
-        timeLabel.setTextSize(14);
-        timeLabel.setPadding(0, 20, 0, 0);
-        layout.addView(timeLabel);
+        // 기존 값 설정
+        if (nameEdit != null) {
+            nameEdit.setText(record.getName() != null ? record.getName() : "");
+        }
+        if (distanceEdit != null) {
+            distanceEdit.setText(String.format("%.2f", record.getTotalDistanceKm()));
+        }
+        if (timeEdit != null) {
+            long totalSeconds = record.getElapsedTimeMs() / 1000;
+            long minutes = totalSeconds / 60;
+            long seconds = totalSeconds % 60;
+            timeEdit.setText(String.format("%d:%02d", minutes, seconds));
+        }
 
-        android.widget.EditText timeEdit = new android.widget.EditText(this);
-        long totalSeconds = record.getElapsedTimeMs() / 1000;
-        long minutes = totalSeconds / 60;
-        long seconds = totalSeconds % 60;
-        timeEdit.setText(String.format("%d:%02d", minutes, seconds));
-        layout.addView(timeEdit);
+        // 난이도 버튼 초기 상태 설정
+        if (easyButton != null && mediumButton != null && hardButton != null) {
+            updateDifficultyButtonStyle(easyButton, "easy".equals(selectedDifficulty[0]));
+            updateDifficultyButtonStyle(mediumButton, "medium".equals(selectedDifficulty[0]));
+            updateDifficultyButtonStyle(hardButton, "hard".equals(selectedDifficulty[0]));
+        }
 
-        builder.setView(layout);
+        // 난이도 버튼 클릭 리스너
+        if (easyButton != null) {
+            easyButton.setOnClickListener(v -> {
+                selectedDifficulty[0] = "easy";
+                updateDifficultyButtonStyle(easyButton, true);
+                updateDifficultyButtonStyle(mediumButton, false);
+                updateDifficultyButtonStyle(hardButton, false);
+            });
+        }
+        if (mediumButton != null) {
+            mediumButton.setOnClickListener(v -> {
+                selectedDifficulty[0] = "medium";
+                updateDifficultyButtonStyle(easyButton, false);
+                updateDifficultyButtonStyle(mediumButton, true);
+                updateDifficultyButtonStyle(hardButton, false);
+            });
+        }
+        if (hardButton != null) {
+            hardButton.setOnClickListener(v -> {
+                selectedDifficulty[0] = "hard";
+                updateDifficultyButtonStyle(easyButton, false);
+                updateDifficultyButtonStyle(mediumButton, false);
+                updateDifficultyButtonStyle(hardButton, true);
+            });
+        }
 
-        builder.setPositiveButton("저장", (dialog, which) -> {
-            try {
-                String distanceStr = distanceEdit.getText().toString().trim();
-                double distanceKm = Double.parseDouble(distanceStr);
-                double distanceMeters = distanceKm * 1000.0;
+        AlertDialog dialog = builder.create();
+        dialog.setCancelable(true);
 
-                String timeStr = timeEdit.getText().toString().trim();
-                String[] timeParts = timeStr.split(":");
-                long totalSecondsNew = 0;
-                if (timeParts.length == 2) {
-                    long minutesNew = Long.parseLong(timeParts[0]);
-                    long secondsNew = Long.parseLong(timeParts[1]);
-                    totalSecondsNew = minutesNew * 60 + secondsNew;
-                } else {
-                    totalSecondsNew = Long.parseLong(timeStr) * 60;
-                }
+        // 취소 버튼 (상단)
+        if (cancelButton != null) {
+            cancelButton.setOnClickListener(v -> dialog.dismiss());
+        }
 
-                double averagePaceSeconds = 0;
-                if (distanceKm > 0) {
-                    averagePaceSeconds = totalSecondsNew / distanceKm;
-                }
+        // 취소 버튼 (하단)
+        if (cancelBottomButton != null) {
+            cancelBottomButton.setOnClickListener(v -> dialog.dismiss());
+        }
 
-                java.util.Map<String, Object> updates = new java.util.HashMap<>();
-                updates.put("totalDistance", distanceMeters);
-                updates.put("totalTime", totalSecondsNew);
-                updates.put("averagePace", averagePaceSeconds);
+        // 저장 버튼
+        if (saveButton != null) {
+            saveButton.setOnClickListener(v -> {
+                try {
+                    String nameStr = nameEdit != null ? nameEdit.getText().toString().trim() : "";
+                    
+                    String distanceStr = distanceEdit != null ? distanceEdit.getText().toString().trim() : "";
+                    double distanceKm = Double.parseDouble(distanceStr);
+                    double distanceMeters = distanceKm * 1000.0;
 
-                firestore.collection("users")
-                        .document(userId)
-                        .collection("runs")
-                        .document(documentId)
-                        .update(updates)
-                        .addOnSuccessListener(aVoid -> {
-                            GoogleSignInUtils.showToast(this, "기록이 수정되었습니다.");
-                        })
-                        .addOnFailureListener(e -> {
-                            GoogleSignInUtils.showToast(this, "기록 수정에 실패했습니다: " + e.getMessage());
-                        });
-            } catch (NumberFormatException e) {
-                GoogleSignInUtils.showToast(this, "올바른 형식으로 입력해주세요.");
-            }
-        });
+                    String timeStr = timeEdit != null ? timeEdit.getText().toString().trim() : "";
+                    String[] timeParts = timeStr.split(":");
+                    long totalSecondsNew = 0;
+                    if (timeParts.length == 2) {
+                        long minutesNew = Long.parseLong(timeParts[0]);
+                        long secondsNew = Long.parseLong(timeParts[1]);
+                        totalSecondsNew = minutesNew * 60 + secondsNew;
+                    } else {
+                        totalSecondsNew = Long.parseLong(timeStr) * 60;
+                    }
 
-        builder.setNegativeButton("취소", null);
-        builder.show();
-    }
+                    double averagePaceSeconds = 0;
+                    if (distanceKm > 0) {
+                        averagePaceSeconds = totalSecondsNew / distanceKm;
+                    }
 
-    private void showDeleteConfirmDialog(String documentId, String userId) {
-        new AlertDialog.Builder(this)
-                .setTitle("기록 삭제")
-                .setMessage("이 기록을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.")
-                .setPositiveButton("삭제", (dialog, which) -> {
+                    java.util.Map<String, Object> updates = new java.util.HashMap<>();
+                    if (!nameStr.isEmpty()) {
+                        updates.put("name", nameStr);
+                    } else {
+                        updates.put("name", null);
+                    }
+                    if (selectedDifficulty[0] != null && !selectedDifficulty[0].isEmpty()) {
+                        updates.put("difficulty", selectedDifficulty[0]);
+                    } else {
+                        updates.put("difficulty", null);
+                    }
+                    updates.put("totalDistance", distanceMeters);
+                    updates.put("totalTime", totalSecondsNew);
+                    updates.put("averagePace", averagePaceSeconds);
+
                     firestore.collection("users")
                             .document(userId)
                             .collection("runs")
                             .document(documentId)
-                            .delete()
+                            .update(updates)
                             .addOnSuccessListener(aVoid -> {
-                                GoogleSignInUtils.showToast(this, "기록이 삭제되었습니다.");
+                                GoogleSignInUtils.showToast(this, "기록이 수정되었습니다.");
+                                dialog.dismiss();
                             })
                             .addOnFailureListener(e -> {
-                                GoogleSignInUtils.showToast(this, "기록 삭제에 실패했습니다: " + e.getMessage());
+                                GoogleSignInUtils.showToast(this, "기록 수정에 실패했습니다: " + e.getMessage());
                             });
-                })
-                .setNegativeButton("취소", null)
-                .show();
+                } catch (NumberFormatException e) {
+                    GoogleSignInUtils.showToast(this, "올바른 형식으로 입력해주세요.");
+                }
+            });
+        }
+
+        dialog.show();
+    }
+
+    private void showDeleteConfirmDialog(String documentId, String userId) {
+        android.view.LayoutInflater inflater = getLayoutInflater();
+        android.view.View dialogView = inflater.inflate(R.layout.dialog_delete_confirm, null);
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setView(dialogView);
+
+        // 뷰 초기화
+        android.widget.ImageButton cancelButton = dialogView.findViewById(R.id.btn_cancel_delete);
+        com.google.android.material.button.MaterialButton cancelBottomButton = dialogView.findViewById(R.id.btn_cancel_delete_bottom);
+        com.google.android.material.button.MaterialButton confirmButton = dialogView.findViewById(R.id.btn_confirm_delete);
+
+        AlertDialog dialog = builder.create();
+        dialog.setCancelable(true);
+
+        // 취소 버튼 (상단)
+        if (cancelButton != null) {
+            cancelButton.setOnClickListener(v -> dialog.dismiss());
+        }
+
+        // 취소 버튼 (하단)
+        if (cancelBottomButton != null) {
+            cancelBottomButton.setOnClickListener(v -> dialog.dismiss());
+        }
+
+        // 삭제 확인 버튼
+        if (confirmButton != null) {
+            confirmButton.setOnClickListener(v -> {
+                firestore.collection("users")
+                        .document(userId)
+                        .collection("runs")
+                        .document(documentId)
+                        .delete()
+                        .addOnSuccessListener(aVoid -> {
+                            GoogleSignInUtils.showToast(this, "기록이 삭제되었습니다.");
+                            dialog.dismiss();
+                        })
+                        .addOnFailureListener(e -> {
+                            GoogleSignInUtils.showToast(this, "기록 삭제에 실패했습니다: " + e.getMessage());
+                        });
+            });
+        }
+
+        dialog.show();
     }
 
     @Override

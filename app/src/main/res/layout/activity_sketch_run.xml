@@ -12,15 +12,22 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:elevation="0dp"
-        app:elevation="0dp">
+        app:elevation="0dp"
+        android:paddingTop="24dp">
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:paddingTop="0dp"
+            android:paddingBottom="16dp"
+            android:gravity="center_vertical"
             app:navigationIcon="@drawable/ic_arrow_back"
             app:title="러닝 코스 선택"
-            app:titleTextColor="?attr/colorOnSurface" />
+            app:titleTextColor="?attr/colorOnSurface"
+            app:titleMarginTop="0dp" />
 
     </com.google.android.material.appbar.AppBarLayout>
 

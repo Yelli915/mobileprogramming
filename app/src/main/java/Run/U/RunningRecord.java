@@ -19,6 +19,8 @@ public class RunningRecord {
     private String userId;
     private String courseId; // 코스 기반 러닝인 경우
     private long createdAt;
+    private String name; // 사용자가 지정한 기록 이름
+    private String difficulty; // 사용자가 지정한 난이도 (easy, medium, hard)
 
     public RunningRecord() {
         this.routePoints = new ArrayList<>();
@@ -165,6 +167,38 @@ public class RunningRecord {
 
     public String getPaceFormatted() {
         return averagePace != null ? averagePace : "--:--/km";
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getDifficulty() {
+        return difficulty;
+    }
+
+    public void setDifficulty(String difficulty) {
+        this.difficulty = difficulty;
+    }
+
+    public String getDifficultyDisplayName() {
+        if (difficulty == null) {
+            return null;
+        }
+        switch (difficulty) {
+            case "easy":
+                return "쉬움";
+            case "medium":
+                return "보통";
+            case "hard":
+                return "어려움";
+            default:
+                return difficulty;
+        }
     }
 }
 

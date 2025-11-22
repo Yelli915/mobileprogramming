@@ -12,7 +12,10 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:padding="16dp"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="16dp"
         android:background="@android:color/white">
 
         <ImageButton
@@ -21,7 +24,7 @@
             android:layout_height="48dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="뒤로가기"
-            android:src="@android:drawable/ic_menu_revert" />
+            android:src="@drawable/ic_arrow_back" />
 
         <TextView
             android:id="@+id/tv_title"

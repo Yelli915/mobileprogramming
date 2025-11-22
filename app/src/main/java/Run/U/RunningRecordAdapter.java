@@ -38,24 +38,39 @@ public class RunningRecordAdapter extends RecyclerView.Adapter<RunningRecordAdap
     }
 
     static class RecordViewHolder extends RecyclerView.ViewHolder {
+        TextView nameText;
         TextView dateText;
         TextView distanceText;
         TextView runningTypeText;
         TextView timeText;
         TextView paceText;
         TextView courseNameText;
+        TextView difficultyText;
 
         RecordViewHolder(View itemView) {
             super(itemView);
+            nameText = itemView.findViewById(R.id.tv_record_name);
             dateText = itemView.findViewById(R.id.tv_record_date);
             distanceText = itemView.findViewById(R.id.tv_record_distance);
             runningTypeText = itemView.findViewById(R.id.tv_record_running_type);
             timeText = itemView.findViewById(R.id.tv_record_time);
             paceText = itemView.findViewById(R.id.tv_record_pace);
             courseNameText = itemView.findViewById(R.id.tv_record_course_name);
+            difficultyText = itemView.findViewById(R.id.tv_record_difficulty);
         }
 
         void bind(RunningRecord record, java.util.Map<String, String> courseNameCache) {
+            // 기록 이름
+            if (nameText != null) {
+                String name = record.getName();
+                if (name != null && !name.trim().isEmpty()) {
+                    nameText.setText(name);
+                    nameText.setVisibility(View.VISIBLE);
+                } else {
+                    nameText.setVisibility(View.GONE);
+                }
+            }
+            
             // 날짜
             if (dateText != null) {
                 dateText.setText(record.getDate());
@@ -66,6 +81,22 @@ public class RunningRecordAdapter extends RecyclerView.Adapter<RunningRecordAdap
                 String distanceStr = record.getDistanceFormatted();
                 // "X.XX km" 형식에서 숫자만 추출하거나 그대로 사용
                 distanceText.setText(distanceStr);
+            }
+            
+            // 난이도 배지
+            if (difficultyText != null) {
+                String difficulty = record.getDifficulty();
+                if (difficulty != null && !difficulty.isEmpty()) {
+                    String difficultyDisplay = record.getDifficultyDisplayName();
+                    if (difficultyDisplay != null) {
+                        difficultyText.setText(difficultyDisplay);
+                        difficultyText.setVisibility(View.VISIBLE);
+                    } else {
+                        difficultyText.setVisibility(View.GONE);
+                    }
+                } else {
+                    difficultyText.setVisibility(View.GONE);
+                }
             }
             
             // 러닝 타입 배지

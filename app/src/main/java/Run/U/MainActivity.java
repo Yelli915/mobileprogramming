@@ -373,6 +373,7 @@ public class MainActivity extends AppCompatActivity {
         Double distance = doc.getDouble("totalDistance");
         Long time = doc.getLong("totalTime");
         String courseId = doc.getString("courseId");
+        String name = doc.getString("name");
 
         String distanceStr = distance != null ?
                 String.format("%.2f km", distance / 1000.0) : "0.00 km";
@@ -384,8 +385,13 @@ public class MainActivity extends AppCompatActivity {
             timeStr = String.format("%d:%02d", minutes, seconds);
         }
 
-        // 초기 텍스트 설정 (코스 이름 없이)
-        String initialText = String.format("📍 %s • ⏱ %s", distanceStr, timeStr);
+        // 기록 이름이 있으면 이름을 포함한 텍스트 생성
+        String initialText;
+        if (name != null && !name.trim().isEmpty()) {
+            initialText = String.format("🏷 %s • 📍 %s • ⏱ %s", name, distanceStr, timeStr);
+        } else {
+            initialText = String.format("📍 %s • ⏱ %s", distanceStr, timeStr);
+        }
         itemView.setText(initialText);
         itemView.setTextSize(14);
         itemView.setTextColor(getResources().getColor(R.color.accent_white, null));
@@ -397,7 +403,7 @@ public class MainActivity extends AppCompatActivity {
         
         // 코스 이름이 있으면 가져오기
         if (courseId != null && !courseId.isEmpty()) {
-            loadCourseNameAndUpdateView(courseId, itemView, distanceStr, timeStr);
+            loadCourseNameAndUpdateView(courseId, itemView, distanceStr, timeStr, name);
         }
         
         // 길게 누르면 삭제/수정 다이얼로그 표시
@@ -417,11 +423,17 @@ public class MainActivity extends AppCompatActivity {
         return itemView;
     }
 
-    private void loadCourseNameAndUpdateView(String courseId, TextView itemView, String distanceStr, String timeStr) {
+    private void loadCourseNameAndUpdateView(String courseId, TextView itemView, String distanceStr, String timeStr, String name) {
         // 캐시에서 먼저 확인
         if (courseNameCache.containsKey(courseId)) {
             String courseName = courseNameCache.get(courseId);
-            itemView.setText(String.format("📍 %s %s • ⏱ %s", courseName, distanceStr, timeStr));
+            String text;
+            if (name != null && !name.trim().isEmpty()) {
+                text = String.format("🏷 %s • 📍 %s %s • ⏱ %s", name, courseName, distanceStr, timeStr);
+            } else {
+                text = String.format("📍 %s %s • ⏱ %s", courseName, distanceStr, timeStr);
+            }
+            itemView.setText(text);
             return;
         }
 
@@ -437,7 +449,13 @@ public class MainActivity extends AppCompatActivity {
                             courseNameCache.put(courseId, courseName);
                             // UI 업데이트
                             if (itemView.getTag() != null) { // 뷰가 아직 유효한지 확인
-                                itemView.setText(String.format("📍 %s %s • ⏱ %s", courseName, distanceStr, timeStr));
+                                String text;
+                                if (name != null && !name.trim().isEmpty()) {
+                                    text = String.format("🏷 %s • 📍 %s %s • ⏱ %s", name, courseName, distanceStr, timeStr);
+                                } else {
+                                    text = String.format("📍 %s %s • ⏱ %s", courseName, distanceStr, timeStr);
+                                }
+                                itemView.setText(text);
                             }
                         }
                     }
@@ -470,6 +488,7 @@ public class MainActivity extends AppCompatActivity {
             Double distance = doc.getDouble("totalDistance");
             Long time = doc.getLong("totalTime");
             String courseId = doc.getString("courseId");
+            String name = doc.getString("name");
 
             String distanceStr = distance != null ?
                     String.format("%.2f km", distance / 1000.0) : "0.00 km";
@@ -481,13 +500,18 @@ public class MainActivity extends AppCompatActivity {
                 timeStr = String.format("%d:%02d", minutes, seconds);
             }
 
-            // 초기 텍스트 설정
-            String initialText = String.format("📍 %s • ⏱ %s", distanceStr, timeStr);
+            // 기록 이름이 있으면 이름을 포함한 텍스트 생성
+            String initialText;
+            if (name != null && !name.trim().isEmpty()) {
+                initialText = String.format("🏷 %s • 📍 %s • ⏱ %s", name, distanceStr, timeStr);
+            } else {
+                initialText = String.format("📍 %s • ⏱ %s", distanceStr, timeStr);
+            }
             itemView.setText(initialText);
             
             // 코스 이름이 있으면 가져오기
             if (courseId != null && !courseId.isEmpty()) {
-                loadCourseNameAndUpdateView(courseId, itemView, distanceStr, timeStr);
+                loadCourseNameAndUpdateView(courseId, itemView, distanceStr, timeStr, name);
             }
             
             // 리스너 재설정 (doc 업데이트)

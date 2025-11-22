@@ -15,8 +15,12 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.DocumentChange;
+import java.text.Collator;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 public class CourseListActivity extends AppCompatActivity {
 
@@ -182,6 +186,18 @@ public class CourseListActivity extends AppCompatActivity {
                 filteredCourses.add(course);
             }
         }
+        
+        // 이름 가나다 순으로 정렬
+        Collections.sort(filteredCourses, new Comparator<Course>() {
+            private Collator collator = Collator.getInstance(Locale.KOREAN);
+            
+            @Override
+            public int compare(Course c1, Course c2) {
+                String name1 = c1.getName() != null ? c1.getName() : "";
+                String name2 = c2.getName() != null ? c2.getName() : "";
+                return collator.compare(name1, name2);
+            }
+        });
         
         updateCategoryButtons();
         setupRecyclerView();
