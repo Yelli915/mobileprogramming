@@ -151,7 +151,7 @@ public class AdminCourseActivity extends AppCompatActivity {
     }
 
     private void checkAdminPermission() {
-        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        FirebaseUser currentUser = GoogleSignInUtils.getCurrentUser();
         if (currentUser == null) {
             GoogleSignInUtils.showToast(this, "로그인이 필요합니다.");
             finish();
@@ -225,7 +225,7 @@ public class AdminCourseActivity extends AppCompatActivity {
             double distance = Double.parseDouble(distanceStr);
             int estimatedTime = Integer.parseInt(estimatedTimeStr);
 
-            FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+            FirebaseUser currentUser = GoogleSignInUtils.getCurrentUser();
             if (currentUser == null) {
                 GoogleSignInUtils.showToast(this, "로그인이 필요합니다.");
                 return;
@@ -288,7 +288,7 @@ public class AdminCourseActivity extends AppCompatActivity {
     }
 
     private void importSeoulCoursesFromApi() {
-        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        FirebaseUser currentUser = GoogleSignInUtils.getCurrentUser();
         if (currentUser == null) {
             GoogleSignInUtils.showToast(this, "로그인이 필요합니다.");
             return;
@@ -725,7 +725,7 @@ public class AdminCourseActivity extends AppCompatActivity {
     }
 
     private void clearFirestoreData() {
-        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        FirebaseUser currentUser = GoogleSignInUtils.getCurrentUser();
         if (currentUser == null) {
             GoogleSignInUtils.showToast(this, "로그인이 필요합니다.");
             return;
@@ -916,7 +916,7 @@ public class AdminCourseActivity extends AppCompatActivity {
     }
 
     private void uploadGyeongbokgungRun() {
-        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        FirebaseUser currentUser = GoogleSignInUtils.getCurrentUser();
         if (currentUser == null) {
             GoogleSignInUtils.showToast(this, "로그인이 필요합니다.");
             return;
@@ -1121,7 +1121,7 @@ public class AdminCourseActivity extends AppCompatActivity {
     }
 
     private void clearGyeongbokgungData() {
-        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        FirebaseUser currentUser = GoogleSignInUtils.getCurrentUser();
         if (currentUser == null) {
             GoogleSignInUtils.showToast(this, "로그인이 필요합니다.");
             return;

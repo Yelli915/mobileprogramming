@@ -885,7 +885,7 @@ public class AllRecordsActivity extends AppCompatActivity {
     }
 
     private void showRunRecordOptionsDialog(RunningRecord record) {
-        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        FirebaseUser currentUser = GoogleSignInUtils.getCurrentUser();
         if (currentUser == null) {
             GoogleSignInUtils.showToast(this, "로그인이 필요합니다.");
             return;

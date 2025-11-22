@@ -38,6 +38,7 @@ import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.Transaction;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -55,6 +56,7 @@ public class LoginActivity extends AppCompatActivity {
     private LinearLayout pageIndicator;
     private TextView termsNoticeText;
     private boolean isSigningIn = false;
+    private boolean isNavigating = false;
     private android.widget.Button googleSignInButton;
 
     @Override
@@ -239,21 +241,19 @@ public class LoginActivity extends AppCompatActivity {
             return;
         }
 
-        // Intent 생성과 launch를 즉시 실행 (Google SDK가 내부적으로 최적화되어 있음)
         try {
             Intent signInIntent = googleSignInClient.getSignInIntent();
             if (signInIntent != null) {
-                // 즉시 launch하여 UI 응답성 향상
                 googleSignInLauncher.launch(signInIntent);
             } else {
                 Log.e(TAG, "Google 로그인 Intent를 생성할 수 없습니다.");
-                GoogleSignInUtils.showToast(this, "로그인 설정 오류가 발생했습니다.");
                 setSigningInState(false);
+                GoogleSignInUtils.showToast(this, "로그인 설정 오류가 발생했습니다.");
             }
         } catch (Exception e) {
             Log.e(TAG, "Google 로그인 시작 중 오류 발생", e);
-            GoogleSignInUtils.showToast(this, "로그인 시작 중 오류가 발생했습니다.");
             setSigningInState(false);
+            GoogleSignInUtils.showToast(this, "로그인 시작 중 오류가 발생했습니다.");
         }
     }
 
@@ -284,13 +284,9 @@ public class LoginActivity extends AppCompatActivity {
             return;
         }
 
-        // Task가 완료된 경우 처리
-        if (task.isComplete()) {
-            handleSignInTask(task);
-        } else {
-            // Task가 아직 완료되지 않은 경우 완료 대기
-            task.addOnCompleteListener(this::handleSignInTask);
-        }
+        // GoogleSignIn.getSignedInAccountFromIntent()는 보통 즉시 완료되므로
+        // addOnCompleteListener로 통일하여 처리
+        task.addOnCompleteListener(this::handleSignInTask);
     }
 
     private void handleSignInTask(Task<GoogleSignInAccount> task) {
@@ -351,9 +347,12 @@ public class LoginActivity extends AppCompatActivity {
         }
 
         try {
+            // GoogleAuthProvider.getCredential의 두 번째 파라미터는 accessToken으로,
+            // Google Sign-In에서는 idToken만으로 충분하므로 null 사용
             AuthCredential credential = GoogleAuthProvider.getCredential(idToken, null);
             if (credential == null) {
                 Log.e(TAG, "AuthCredential을 생성할 수 없습니다.");
+                setSigningInState(false);
                 GoogleSignInUtils.showToast(this, R.string.sign_in_failed);
                 return;
             }
@@ -363,13 +362,11 @@ public class LoginActivity extends AppCompatActivity {
                         @Override
                         public void onComplete(@NonNull Task<AuthResult> task) {
                             if (task.isSuccessful()) {
-                                // AuthResult에서 직접 사용자 가져오기 (getCurrentUser()는 때로 null 반환 가능)
                                 AuthResult result = task.getResult();
                                 FirebaseUser user = result != null ? result.getUser() : null;
                                 
                                 if (user == null) {
-                                    // AuthResult에서 가져오기 실패 시 getCurrentUser() 재시도
-                                    user = firebaseAuth.getCurrentUser();
+                                    user = GoogleSignInUtils.getCurrentUser();
                                 }
                                 
                                 if (user != null) {
@@ -413,104 +410,235 @@ public class LoginActivity extends AppCompatActivity {
     private void updateUserInFirestore(FirebaseUser user) {
         if (user == null) {
             Log.e(TAG, "FirebaseUser가 null입니다.");
+            setSigningInState(false);
             GoogleSignInUtils.showToast(this, R.string.firebase_auth_failed);
+            return;
+        }
+
+        // Email 필수 검증
+        if (!validateUserEmail(user)) {
+            Log.e(TAG, "사용자 Email이 없습니다. Firestore 저장을 건너뜁니다.");
+            setSigningInState(false);
+            GoogleSignInUtils.showToast(this, "사용자 정보가 불완전합니다. 다시 로그인해주세요.");
             return;
         }
 
         if (firebaseFirestore == null) {
             Log.e(TAG, "Firestore가 초기화되지 않았습니다.");
-            navigateToMainActivity(true); // Firestore 저장 실패해도 로그인은 진행
+            Log.w(TAG, "Firestore 초기화 실패로 인해 사용자 정보 저장을 건너뜁니다. 로그인은 진행합니다.");
+            navigateToMainActivity(true);
             return;
         }
 
         String uid = user.getUid();
         if (uid == null || uid.isEmpty()) {
             Log.e(TAG, "사용자 UID가 null이거나 비어있습니다.");
-            navigateToMainActivity(true); // UID 없어도 로그인은 진행
+            Log.w(TAG, "UID 없음으로 인해 사용자 정보 저장을 건너뜁니다. 로그인은 진행합니다.");
+            navigateToMainActivity(true);
             return;
         }
 
-        // 즉시 MainActivity로 이동하고, Firestore 업데이트는 백그라운드에서 처리
-        navigateToMainActivity(true);
+        Log.d(TAG, "Firestore에 사용자 정보 저장 시작 - UID: " + uid + ", Email: " + user.getEmail());
 
-        // Firestore 업데이트는 백그라운드에서 비동기로 처리
+        // 트랜잭션을 사용하여 동시성 문제 완화
         DocumentReference userRef = firebaseFirestore.collection("users").document(uid);
-        userRef.get().addOnCompleteListener(task -> {
-            if (task.isSuccessful()) {
-                DocumentSnapshot document = task.getResult();
-                if (document != null && document.exists()) {
-                    Log.d(TAG, "기존 사용자입니다: " + user.getEmail());
-                    updateExistingUserInBackground(userRef, user);
-                } else {
-                    Log.d(TAG, "신규 사용자입니다: " + user.getEmail());
-                    createNewUserInBackground(userRef, user);
+        updateOrCreateUserWithTransaction(userRef, user, 0);
+    }
+
+    private void updateOrCreateUserWithTransaction(DocumentReference userRef, FirebaseUser user, int retryCount) {
+        final int MAX_RETRIES = 3;
+        final long RETRY_DELAY_MS = 1000; // 1초
+
+        if (isFinishing() || isDestroyed()) {
+            Log.d(TAG, "Activity가 종료되어 Firestore 업데이트를 건너뜁니다.");
+            return;
+        }
+
+        firebaseFirestore.runTransaction((Transaction transaction) -> {
+            DocumentSnapshot snapshot = transaction.get(userRef);
+            
+            if (snapshot.exists()) {
+                // 기존 사용자: 업데이트
+                Map<String, Object> updates = extractUserData(user);
+                
+                // email도 항상 갱신 (구글 계정 정보 변경 반영)
+                String email = user.getEmail();
+                if (email != null && !email.isEmpty()) {
+                    updates.put("email", email);
                 }
+                
+                // updatedAt 필드 추가
+                updates.put("updatedAt", FieldValue.serverTimestamp());
+                
+                // createdAt은 보존 (업데이트하지 않음)
+                // 명시적으로 제외하여 기존 값 보존 보장
+                updates.remove("createdAt");
+                
+                transaction.update(userRef, updates);
+                Log.d(TAG, "트랜잭션: 기존 사용자 업데이트 예약 - UID: " + user.getUid() + ", Email: " + email);
             } else {
-                Log.w(TAG, "Firestore 문서 조회 실패", task.getException());
-                // 조회 실패는 조용히 처리 (이미 화면 전환됨)
+                // 신규 사용자: 생성
+                Map<String, Object> newUser = extractUserData(user);
+                
+                // email 필수 확인
+                String email = user.getEmail();
+                if (email == null || email.isEmpty()) {
+                    throw new IllegalStateException("Email이 필수입니다.");
+                }
+                newUser.put("email", email);
+                newUser.put("role", "user");
+                
+                // createdAt은 신규 생성 시에만 설정
+                // 트랜잭션으로 원자적 처리되므로 동시성 문제 완화
+                newUser.put("createdAt", FieldValue.serverTimestamp());
+                newUser.put("updatedAt", FieldValue.serverTimestamp());
+                
+                // 트랜잭션으로 원자적 처리 (동시성 문제 완화)
+                transaction.set(userRef, newUser);
+                Log.d(TAG, "트랜잭션: 신규 사용자 생성 예약 - UID: " + user.getUid() + ", Email: " + email);
+            }
+            
+            return null;
+        }).addOnSuccessListener(aVoid -> {
+            if (!isFinishing() && !isDestroyed()) {
+                Log.d(TAG, "✅ 트랜잭션 성공 - 사용자 정보 저장 완료 - UID: " + user.getUid());
+                navigateToMainActivity(true);
+            }
+        }).addOnFailureListener(e -> {
+            if (isFinishing() || isDestroyed()) {
+                Log.d(TAG, "Activity가 종료되어 트랜잭션 실패 처리를 건너뜁니다.");
+                return;
+            }
+
+            Log.w(TAG, "트랜잭션 실패 (재시도 " + retryCount + "/" + MAX_RETRIES + ") - UID: " + user.getUid(), e);
+
+            if (retryCount < MAX_RETRIES && isRetryableError(e)) {
+                Log.d(TAG, (retryCount + 1) + "초 후 재시도합니다...");
+                android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+                handler.postDelayed(() -> {
+                    if (!isFinishing() && !isDestroyed()) {
+                        updateOrCreateUserWithTransaction(userRef, user, retryCount + 1);
+                    }
+                }, RETRY_DELAY_MS * (retryCount + 1));
+            } else {
+                if (retryCount >= MAX_RETRIES) {
+                    Log.e(TAG, "최대 재시도 횟수를 초과했습니다. 사용자 정보 저장에 실패했습니다.");
+                    handleFirestoreError(e, user, "네트워크 연결을 확인해주세요.");
+                } else {
+                    Log.e(TAG, "재시도 불가능한 오류입니다. 사용자 정보 저장에 실패했습니다.");
+                    handleFirestoreError(e, user, "사용자 정보 저장 중 오류가 발생했습니다.");
+                }
             }
         });
     }
 
+    private boolean isRetryableError(Exception exception) {
+        if (exception == null) {
+            return false;
+        }
+
+        String errorMessage = exception.getMessage();
+        if (errorMessage == null) {
+            return true; // 메시지가 없으면 재시도 가능한 것으로 간주
+        }
+
+        String lowerMessage = errorMessage.toLowerCase();
+        // 네트워크 관련 오류는 재시도 가능
+        if (lowerMessage.contains("network") || 
+            lowerMessage.contains("unavailable") ||
+            lowerMessage.contains("timeout") ||
+            lowerMessage.contains("deadline") ||
+            lowerMessage.contains("connection")) {
+            return true;
+        }
+
+        // 권한 오류나 잘못된 요청은 재시도 불가능
+        if (lowerMessage.contains("permission") ||
+            lowerMessage.contains("unauthorized") ||
+            lowerMessage.contains("invalid") ||
+            lowerMessage.contains("not found")) {
+            return false;
+        }
+
+        // 기타 오류는 재시도 가능한 것으로 간주
+        return true;
+    }
+
     private Map<String, Object> extractUserData(FirebaseUser user) {
         Map<String, Object> userData = new HashMap<>();
+        
+        // email은 호출 전에 검증되므로 반드시 포함
         String email = user.getEmail();
-        if (email != null) {
+        if (email != null && !email.isEmpty()) {
             userData.put("email", email);
+            Log.d(TAG, "사용자 데이터 추출 - Email: " + email);
         }
+        
         String displayName = user.getDisplayName();
-        if (displayName != null) {
+        if (displayName != null && !displayName.isEmpty()) {
             userData.put("displayName", displayName);
+            Log.d(TAG, "사용자 데이터 추출 - DisplayName: " + displayName);
         }
-        String photoURL = user.getPhotoUrl() != null ? user.getPhotoUrl().toString() : "";
-        if (photoURL != null && !photoURL.isEmpty()) {
-            userData.put("photoURL", photoURL);
+        
+        Uri photoUri = user.getPhotoUrl();
+        if (photoUri != null) {
+            String photoURL = photoUri.toString();
+            if (!photoURL.isEmpty()) {
+                userData.put("photoURL", photoURL);
+                Log.d(TAG, "사용자 데이터 추출 - PhotoURL: " + photoURL);
+            }
         }
+        
         return userData;
     }
 
-    private void updateExistingUserInBackground(DocumentReference userRef, FirebaseUser user) {
-        Map<String, Object> updates = extractUserData(user);
-        // email은 업데이트에서 제외
-        updates.remove("email");
-
-        if (!updates.isEmpty()) {
-            userRef.update(updates)
-                    .addOnSuccessListener(unused -> {
-                        Log.d(TAG, "사용자 정보 업데이트 성공");
-                    })
-                    .addOnFailureListener(e -> {
-                        Log.w(TAG, "사용자 정보 업데이트 실패", e);
-                        // 백그라운드 업데이트 실패는 조용히 처리
-                    });
-        } else {
-            Log.d(TAG, "업데이트할 내용이 없습니다.");
+    private boolean validateUserEmail(FirebaseUser user) {
+        if (user == null) {
+            return false;
         }
+        String email = user.getEmail();
+        return email != null && !email.isEmpty();
     }
 
-    private void createNewUserInBackground(DocumentReference userRef, FirebaseUser user) {
-        Map<String, Object> newUser = extractUserData(user);
-        newUser.put("role", "user");
-        newUser.put("createdAt", FieldValue.serverTimestamp());
 
-        userRef.set(newUser)
-                .addOnSuccessListener(unused -> {
-                    Log.d(TAG, "신규 사용자 정보 Firestore에 저장 성공");
-                })
-                .addOnFailureListener(e -> {
-                    Log.w(TAG, "신규 사용자 정보 저장 실패", e);
-                    // 백그라운드 저장 실패는 조용히 처리
-                });
+    private void handleFirestoreError(Exception exception, FirebaseUser user, String defaultMessage) {
+        if (isFinishing() || isDestroyed()) {
+            Log.d(TAG, "Activity가 종료되어 오류 처리를 건너뜁니다.");
+            return;
+        }
+        
+        String errorMessage = defaultMessage;
+        if (exception != null && exception.getMessage() != null) {
+            String exceptionMsg = exception.getMessage().toLowerCase();
+            if (exceptionMsg.contains("permission") || exceptionMsg.contains("unauthorized")) {
+                errorMessage = "권한 오류가 발생했습니다. 관리자에게 문의하세요.";
+            } else if (exceptionMsg.contains("network") || exceptionMsg.contains("unavailable")) {
+                errorMessage = "네트워크 연결을 확인해주세요.";
+            }
+        }
+        
+        Log.e(TAG, "Firestore 오류 처리 - " + errorMessage + ", UID: " + (user != null ? user.getUid() : "null"));
+        
+        // 오류 발생해도 로그인은 진행 (Firebase 인증은 성공했으므로)
+        GoogleSignInUtils.showToast(this, errorMessage);
+        navigateToMainActivity(false);
     }
 
     private void navigateToMainActivity(boolean showSuccessMessage) {
-        setSigningInState(false); // 로그인 상태 초기화
+        // 중복 화면 전환 방지
+        if (isNavigating) {
+            Log.d(TAG, "이미 화면 전환 중입니다. 중복 호출을 무시합니다.");
+            return;
+        }
         
         // Activity가 이미 종료 중이면 화면 전환 불가
-        if (isFinishing()) {
+        if (isFinishing() || isDestroyed()) {
             Log.w(TAG, "Activity가 이미 종료 중입니다. 화면 전환 불가.");
             return;
         }
+        
+        isNavigating = true;
+        setSigningInState(false); // 로그인 상태 초기화
         
         Intent intent = createMainActivityIntent();
         
@@ -533,6 +661,7 @@ public class LoginActivity extends AppCompatActivity {
             Log.d(TAG, "MainActivity로 이동 성공");
         } catch (Exception e) {
             Log.e(TAG, "MainActivity로 이동 실패", e);
+            isNavigating = false;
             setSigningInState(false);
             GoogleSignInUtils.showToast(this, "화면 전환 중 오류가 발생했습니다.");
         }
@@ -549,6 +678,7 @@ public class LoginActivity extends AppCompatActivity {
         super.onDestroy();
         // 로그인 상태 초기화
         isSigningIn = false;
+        isNavigating = false;
     }
 
     @Override

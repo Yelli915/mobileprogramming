@@ -2,7 +2,10 @@ package Run.U;
 
 import android.content.Context;
 import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
+import android.os.Build;
 import android.util.Log;
 import android.widget.Toast;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -100,15 +103,30 @@ public class GoogleSignInUtils {
         }
         
         try {
-            // Application Context 사용 권장 (Activity Context보다 메모리 누수 위험 적음)
             Context appContext = context.getApplicationContext();
             ConnectivityManager connectivityManager = (ConnectivityManager) appContext.getSystemService(Context.CONNECTIVITY_SERVICE);
-            if (connectivityManager != null) {
+            if (connectivityManager == null) {
+                return false;
+            }
+            
+            // Android 10 (API 29) 이상에서는 NetworkCapabilities 사용
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Network network = connectivityManager.getActiveNetwork();
+                if (network == null) {
+                    return false;
+                }
+                NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(network);
+                if (capabilities == null) {
+                    return false;
+                }
+                return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                       capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+            } else {
+                // Android 9 이하에서는 기존 API 사용 (deprecated이지만 하위 호환성)
                 NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
                 return activeNetworkInfo != null && activeNetworkInfo.isConnected();
             }
         } catch (Exception e) {
-            // SecurityException 등의 예외 처리
             Log.w(TAG, "네트워크 확인 중 오류 발생", e);
         }
         return false;
@@ -236,8 +254,40 @@ public class GoogleSignInUtils {
                 });
     }
 
-    public static boolean isAdminSync(FirebaseUser user) {
-        return false;
+    public static void signOut(Context context, Runnable onComplete) {
+        if (context == null) {
+            Log.w(TAG, "Context가 null입니다. 로그아웃을 수행할 수 없습니다.");
+            if (onComplete != null) {
+                onComplete.run();
+            }
+            return;
+        }
+
+        // Firebase 로그아웃 (getAuth()로 재확인하여 안전하게 처리)
+        FirebaseAuth auth = getAuth();
+        if (auth != null) {
+            auth.signOut();
+        }
+
+        // Google 로그아웃
+        GoogleSignInClient signInClient = getGoogleSignInClient(context);
+        if (signInClient != null) {
+            signInClient.signOut().addOnCompleteListener(task -> {
+                if (task.isSuccessful()) {
+                    Log.d(TAG, "로그아웃 성공");
+                } else {
+                    Log.w(TAG, "Google 로그아웃 실패", task.getException());
+                }
+                if (onComplete != null) {
+                    onComplete.run();
+                }
+            });
+        } else {
+            Log.w(TAG, "GoogleSignInClient가 null입니다.");
+            if (onComplete != null) {
+                onComplete.run();
+            }
+        }
     }
 
     public interface AdminRoleCallback {

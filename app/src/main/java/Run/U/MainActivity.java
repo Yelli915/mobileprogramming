@@ -16,7 +16,6 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.material.button.MaterialButton;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -33,7 +32,6 @@ public class MainActivity extends AppCompatActivity {
 
     private FirebaseAuth firebaseAuth;
     private FirebaseFirestore firestore;
-    private GoogleSignInClient googleSignInClient;
     private TextView welcomeText;
     private ImageButton logoutButton;
     private MaterialButton startNormalRunButton;
@@ -63,7 +61,6 @@ public class MainActivity extends AppCompatActivity {
 
         firebaseAuth = GoogleSignInUtils.getAuth();
         firestore = GoogleSignInUtils.getFirestore();
-        googleSignInClient = GoogleSignInUtils.getGoogleSignInClient(this);
 
         // View 초기화
         welcomeText = findViewById(R.id.welcome_text);
@@ -121,6 +118,18 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
+        
+        // 로그인 체크
+        FirebaseUser currentUser = GoogleSignInUtils.getCurrentUser();
+        if (currentUser == null) {
+            // 로그인되어 있지 않으면 LoginActivity로 이동
+            Intent intent = new Intent(MainActivity.this, LoginActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+            return;
+        }
+        
         updateWelcomeMessage();
         loadWeeklyStats();
         loadRecentRuns();
@@ -131,7 +140,7 @@ public class MainActivity extends AppCompatActivity {
         if (welcomeText == null) {
             return;
         }
-        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        FirebaseUser currentUser = GoogleSignInUtils.getCurrentUser();
         if (currentUser != null) {
             String displayName = GoogleSignInUtils.getUserDisplayName(currentUser);
             if (displayName != null && !displayName.isEmpty()) {
@@ -149,7 +158,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void checkAdminRole() {
-        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        FirebaseUser currentUser = GoogleSignInUtils.getCurrentUser();
         if (currentUser == null) {
             if (adminCard != null) {
                 adminCard.setVisibility(View.GONE);
@@ -167,7 +176,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadWeeklyStats() {
-        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        FirebaseUser currentUser = GoogleSignInUtils.getCurrentUser();
         if (currentUser == null || totalDistanceText == null || totalTimeText == null || runCountText == null) {
             return;
         }
@@ -244,7 +253,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadRecentRuns() {
-        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        FirebaseUser currentUser = GoogleSignInUtils.getCurrentUser();
         if (currentUser == null || recentRunsList == null || noRunsText == null) {
             return;
         }
@@ -533,7 +542,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showRunRecordOptionsDialog(String documentId, QueryDocumentSnapshot doc) {
-        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        FirebaseUser currentUser = GoogleSignInUtils.getCurrentUser();
         if (currentUser == null) {
             GoogleSignInUtils.showToast(this, "로그인이 필요합니다.");
             return;
@@ -719,12 +728,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void performLogout() {
-        firebaseAuth.signOut();
-        googleSignInClient.signOut().addOnCompleteListener(this, task -> {
+        // GoogleSignInUtils를 통한 일관된 로그아웃 처리
+        GoogleSignInUtils.signOut(this, () -> {
+            // Activity가 종료되었는지 확인
+            if (isFinishing() || isDestroyed()) {
+                Log.d("MainActivity", "Activity가 종료되어 로그아웃 화면 전환을 건너뜁니다.");
+                return;
+            }
+            
+            // 로그아웃 완료 후 LoginActivity로 이동
             Intent intent = new Intent(MainActivity.this, LoginActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            startActivity(intent);
-            finish();
+            try {
+                startActivity(intent);
+                finish();
+            } catch (Exception e) {
+                Log.e("MainActivity", "로그아웃 후 화면 전환 실패", e);
+                GoogleSignInUtils.showToast(this, "로그아웃 후 화면 전환 중 오류가 발생했습니다.");
+            }
         });
     }
 }
