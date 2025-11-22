@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:cardCornerRadius="24dp"
+    app:cardElevation="8dp"
+    android:layout_margin="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <!-- 제목 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="날짜별 필터"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnSurface"
+            android:layout_marginBottom="20dp" />
+
+        <!-- 구분선 -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?attr/colorSurfaceVariant"
+            android:layout_marginBottom="20dp" />
+
+        <!-- 시작 날짜 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="시작 날짜"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:layout_marginBottom="8dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_start_date"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:minHeight="56dp"
+            android:text="날짜 선택"
+            android:textSize="16sp"
+            android:textAllCaps="false"
+            app:cornerRadius="12dp"
+            app:strokeWidth="2dp"
+            app:strokeColor="#FF6B35"
+            app:backgroundTint="@android:color/transparent"
+            app:icon="@android:drawable/ic_menu_today"
+            app:iconGravity="start" />
+
+        <!-- 종료 날짜 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="종료 날짜"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:layout_marginBottom="8dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_end_date"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:minHeight="56dp"
+            android:text="날짜 선택"
+            android:textSize="16sp"
+            android:textAllCaps="false"
+            app:cornerRadius="12dp"
+            app:strokeWidth="2dp"
+            app:strokeColor="#FF6B35"
+            app:backgroundTint="@android:color/transparent"
+            app:icon="@android:drawable/ic_menu_today"
+            app:iconGravity="start" />
+
+        <!-- 버튼 영역 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="end"
+            android:layout_marginTop="8dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_clear_date"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="전체"
+                android:textSize="14sp"
+                android:textAllCaps="false"
+                android:textColor="#FF6B35"
+                android:layout_marginEnd="8dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_apply_date"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="적용"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textAllCaps="false"
+                app:cornerRadius="12dp"
+                app:backgroundTint="#FF6B35"
+                app:elevation="0dp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.cardview.widget.CardView>
+

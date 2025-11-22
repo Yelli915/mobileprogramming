@@ -43,6 +43,15 @@
         <activity
             android:name=".SketchRunActivity"
             android:exported="false" />
+        <activity
+            android:name=".AdminCourseActivity"
+            android:exported="false" />
+        <activity
+            android:name=".CourseListActivity"
+            android:exported="false" />
+        <activity
+            android:name=".AllRecordsActivity"
+            android:exported="false" />
             
     </application>
 

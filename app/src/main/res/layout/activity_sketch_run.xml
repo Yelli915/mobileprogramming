@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -42,14 +43,35 @@
                 android:paddingHorizontal="16dp"
                 android:paddingTop="16dp">
 
-                <TextView
+                <RelativeLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="추천 코스"
-                    android:textSize="22sp"
-                    android:textStyle="bold"
-                    android:textColor="?attr/colorOnSurface"
-                    android:layout_marginBottom="12dp" />
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentStart="true"
+                        android:text="추천 코스"
+                        android:textSize="22sp"
+                        android:textStyle="bold"
+                        android:textColor="?attr/colorOnSurface" />
+
+                    <TextView
+                        android:id="@+id/btnMoreCourses"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:text="더보기 >"
+                        android:textSize="14sp"
+                        android:textColor="#FF6B35"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:padding="8dp" />
+
+                </RelativeLayout>
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/recyclerViewCourses"
@@ -58,6 +80,7 @@
                     android:clipToPadding="false"
                     android:paddingEnd="16dp"
                     android:layout_marginBottom="8dp" />
+
             </LinearLayout>
 
             <!-- 지도 미리보기 카드 -->
@@ -89,18 +112,10 @@
                         android:id="@+id/mapContainer"
                         android:layout_width="match_parent"
                         android:layout_height="280dp"
-                        android:background="?attr/colorSurfaceVariant">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="지도 영역"
-                            android:textColor="?attr/colorOnSurfaceVariant"
-                            android:textSize="14sp"
-                            android:layout_gravity="center" />
-                    </FrameLayout>
+                        android:background="?attr/colorSurfaceVariant" />
 
                 </LinearLayout>
+
             </com.google.android.material.card.MaterialCardView>
 
             <!-- 코스 정보 카드 -->
@@ -168,6 +183,7 @@
                                 android:textSize="20sp"
                                 android:textStyle="bold"
                                 android:textColor="?attr/colorOnSurface" />
+
                         </LinearLayout>
 
                         <!-- 예상 소요 시간 -->
@@ -204,6 +220,7 @@
                                 android:textSize="20sp"
                                 android:textStyle="bold"
                                 android:textColor="?attr/colorOnSurface" />
+
                         </LinearLayout>
 
                         <!-- 난이도 -->
@@ -239,7 +256,9 @@
                                 android:textSize="20sp"
                                 android:textStyle="bold"
                                 android:textColor="?attr/colorOnSurface" />
+
                         </LinearLayout>
+
                     </LinearLayout>
 
                     <!-- 코스 상세 보기 버튼 -->
@@ -255,8 +274,8 @@
                         app:iconGravity="textStart"
                         style="@style/Widget.Material3.Button.OutlinedButton" />
 
-
                 </LinearLayout>
+
             </com.google.android.material.card.MaterialCardView>
 
             <!-- 시작 버튼 -->

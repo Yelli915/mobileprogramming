@@ -25,16 +25,5 @@
 
     </LinearLayout>
 
-    <Button
-        android:id="@+id/logout_button"
-        android:layout_width="match_parent"
-        style="@style/ButtonPrimary"
-        android:layout_height="52dp"
-        android:text="@string/logout"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:textAllCaps="false"
-        android:layout_marginTop="16dp" />
-
 </LinearLayout>
 

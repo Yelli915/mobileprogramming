@@ -13,6 +13,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.GeoPoint;
 import java.util.ArrayList;
@@ -196,6 +197,51 @@ public class GoogleSignInUtils {
         } catch (Exception e) {
         }
         return 0.0;
+    }
+
+    public static void checkAdminRole(FirebaseUser user, AdminRoleCallback callback) {
+        if (user == null || callback == null) {
+            callback.onResult(false);
+            return;
+        }
+
+        String uid = user.getUid();
+        if (uid == null || uid.isEmpty()) {
+            callback.onResult(false);
+            return;
+        }
+
+        getFirestore().collection("users")
+                .document(uid)
+                .get()
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        DocumentSnapshot document = task.getResult();
+                        if (document != null && document.exists()) {
+                            String role = document.getString("role");
+                            if (role != null) {
+                                role = role.trim().toLowerCase();
+                            }
+                            boolean isAdmin = "admin".equals(role);
+                            Log.d(TAG, "사용자 권한 확인 - UID: " + uid + ", Role: " + role + ", IsAdmin: " + isAdmin);
+                            callback.onResult(isAdmin);
+                        } else {
+                            Log.d(TAG, "사용자 문서가 존재하지 않음 - UID: " + uid);
+                            callback.onResult(false);
+                        }
+                    } else {
+                        Log.w(TAG, "관리자 권한 확인 실패 - UID: " + uid, task.getException());
+                        callback.onResult(false);
+                    }
+                });
+    }
+
+    public static boolean isAdminSync(FirebaseUser user) {
+        return false;
+    }
+
+    public interface AdminRoleCallback {
+        void onResult(boolean isAdmin);
     }
 }
 
