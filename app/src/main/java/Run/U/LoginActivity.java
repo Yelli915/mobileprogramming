@@ -12,7 +12,10 @@ import android.text.method.LinkMovementMethod;
 import android.text.style.ClickableSpan;
 import android.text.style.ForegroundColorSpan;
 import android.util.Log;
+import android.content.SharedPreferences;
+import android.text.TextUtils;
 import android.view.View;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -32,6 +35,8 @@ import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseAuthUserCollisionException;
+import com.google.firebase.auth.FirebaseAuthWeakPasswordException;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.firestore.DocumentReference;
@@ -58,6 +63,10 @@ public class LoginActivity extends AppCompatActivity {
     private boolean isSigningIn = false;
     private boolean isNavigating = false;
     private android.widget.Button googleSignInButton;
+    private com.google.android.material.textfield.TextInputEditText emailInput;
+    private com.google.android.material.textfield.TextInputEditText passwordInput;
+    private Button signInButton;
+    private Button signUpButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -73,6 +82,19 @@ public class LoginActivity extends AppCompatActivity {
                 new ActivityResultContracts.StartActivityForResult(),
                 this::handleSignInResult
         );
+
+        emailInput = findViewById(R.id.email_input);
+        passwordInput = findViewById(R.id.password_input);
+        signInButton = findViewById(R.id.sign_in_button);
+        signUpButton = findViewById(R.id.sign_up_button);
+        
+        if (signInButton != null) {
+            signInButton.setOnClickListener(v -> signInWithEmailPassword());
+        }
+        
+        if (signUpButton != null) {
+            signUpButton.setOnClickListener(v -> signUpWithEmailPassword());
+        }
 
         googleSignInButton = findViewById(R.id.google_sign_in_button);
         if (googleSignInButton != null) {
@@ -224,12 +246,19 @@ public class LoginActivity extends AppCompatActivity {
             navigateToMainActivity(false);
             return;
         }
+        
     }
 
     private void setSigningInState(boolean signingIn) {
         isSigningIn = signingIn;
         if (googleSignInButton != null) {
             googleSignInButton.setEnabled(!signingIn);
+        }
+        if (signInButton != null) {
+            signInButton.setEnabled(!signingIn);
+        }
+        if (signUpButton != null) {
+            signUpButton.setEnabled(!signingIn);
         }
     }
 
@@ -671,6 +700,133 @@ public class LoginActivity extends AppCompatActivity {
         Intent intent = new Intent(this, MainActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         return intent;
+    }
+
+    private void signInWithEmailPassword() {
+        if (emailInput == null || passwordInput == null) {
+            return;
+        }
+
+        String email = emailInput.getText().toString().trim();
+        String password = passwordInput.getText().toString();
+
+        if (TextUtils.isEmpty(email)) {
+            GoogleSignInUtils.showToast(this, getString(R.string.invalid_email));
+            return;
+        }
+
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            GoogleSignInUtils.showToast(this, getString(R.string.invalid_email));
+            return;
+        }
+
+        if (TextUtils.isEmpty(password) || password.length() < 6) {
+            GoogleSignInUtils.showToast(this, getString(R.string.invalid_password));
+            return;
+        }
+
+        if (!GoogleSignInUtils.isNetworkAvailable(this)) {
+            GoogleSignInUtils.showToast(this, "네트워크 연결을 확인해주세요.");
+            return;
+        }
+
+        if (isSigningIn) {
+            return;
+        }
+
+        setSigningInState(true);
+
+        firebaseAuth.signInWithEmailAndPassword(email, password)
+                .addOnCompleteListener(task -> {
+                    setSigningInState(false);
+                    if (task.isSuccessful()) {
+                        Log.d(TAG, "이메일/비밀번호 로그인 성공");
+                        FirebaseUser user = task.getResult().getUser();
+                        if (user != null) {
+                            updateUserInFirestore(user);
+                        }
+                    } else {
+                        Log.e(TAG, "이메일/비밀번호 로그인 실패", task.getException());
+                        String errorMessage = getString(R.string.email_password_login_failed);
+                        Exception exception = task.getException();
+                        if (exception != null) {
+                            String exceptionMsg = exception.getMessage();
+                            if (exceptionMsg != null) {
+                                if (exceptionMsg.contains("user-not-found") || 
+                                    exceptionMsg.contains("wrong-password")) {
+                                    errorMessage = getString(R.string.email_password_login_failed);
+                                } else if (exceptionMsg.contains("network")) {
+                                    errorMessage = "네트워크 연결을 확인해주세요.";
+                                }
+                            }
+                        }
+                        GoogleSignInUtils.showToast(this, errorMessage);
+                    }
+                });
+    }
+
+    private void signUpWithEmailPassword() {
+        if (emailInput == null || passwordInput == null) {
+            return;
+        }
+
+        String email = emailInput.getText().toString().trim();
+        String password = passwordInput.getText().toString();
+
+        if (TextUtils.isEmpty(email)) {
+            GoogleSignInUtils.showToast(this, getString(R.string.invalid_email));
+            return;
+        }
+
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            GoogleSignInUtils.showToast(this, getString(R.string.invalid_email));
+            return;
+        }
+
+        if (TextUtils.isEmpty(password) || password.length() < 6) {
+            GoogleSignInUtils.showToast(this, getString(R.string.invalid_password));
+            return;
+        }
+
+        if (!GoogleSignInUtils.isNetworkAvailable(this)) {
+            GoogleSignInUtils.showToast(this, "네트워크 연결을 확인해주세요.");
+            return;
+        }
+
+        if (isSigningIn) {
+            return;
+        }
+
+        setSigningInState(true);
+
+        firebaseAuth.createUserWithEmailAndPassword(email, password)
+                .addOnCompleteListener(task -> {
+                    setSigningInState(false);
+                    if (task.isSuccessful()) {
+                        Log.d(TAG, "이메일/비밀번호 회원가입 성공");
+                        FirebaseUser user = task.getResult().getUser();
+                        if (user != null) {
+                            updateUserInFirestore(user);
+                        }
+                    } else {
+                        Log.e(TAG, "이메일/비밀번호 회원가입 실패", task.getException());
+                        String errorMessage = getString(R.string.email_password_signup_failed);
+                        Exception exception = task.getException();
+                        if (exception != null) {
+                            if (exception instanceof FirebaseAuthUserCollisionException) {
+                                errorMessage = getString(R.string.email_already_in_use);
+                            } else if (exception instanceof FirebaseAuthWeakPasswordException) {
+                                errorMessage = getString(R.string.weak_password);
+                            } else {
+                                String exceptionMsg = exception.getMessage();
+                                if (exceptionMsg != null && exceptionMsg.contains("network")) {
+                                    errorMessage = "네트워크 연결을 확인해주세요.";
+                                }
+                            }
+                        }
+                        GoogleSignInUtils.showToast(this, errorMessage);
+                    }
+                });
     }
 
     @Override

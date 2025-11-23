@@ -27,4 +27,17 @@
     <string name="logout_dialog_message">정말 로그아웃 하시겠습니까?</string>
     <string name="cancel">취소</string>
     <string name="confirm">확인</string>
+    
+    <!-- 이메일/비밀번호 로그인 -->
+    <string name="email_login_title">이메일로 로그인</string>
+    <string name="email_hint">이메일 주소</string>
+    <string name="password_hint">비밀번호</string>
+    <string name="sign_in">로그인</string>
+    <string name="sign_up">회원가입</string>
+    <string name="invalid_email">올바른 이메일 주소를 입력해주세요.</string>
+    <string name="invalid_password">비밀번호는 6자 이상이어야 합니다.</string>
+    <string name="email_password_login_failed">이메일 또는 비밀번호가 올바르지 않습니다.</string>
+    <string name="email_password_signup_failed">회원가입에 실패했습니다.</string>
+    <string name="email_already_in_use">이미 사용 중인 이메일입니다.</string>
+    <string name="weak_password">비밀번호가 너무 약합니다.</string>
 </resources>
