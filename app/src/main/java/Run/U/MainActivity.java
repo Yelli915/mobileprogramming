@@ -183,7 +183,10 @@ public class MainActivity extends AppCompatActivity {
 
         // 이번 주 시작일 계산 (월요일)
         Calendar calendar = Calendar.getInstance();
-        calendar.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY);
+        int dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK);
+        // 일요일이면 6일 전, 그 외에는 월요일까지의 일수 계산
+        int daysFromMonday = (dayOfWeek == Calendar.SUNDAY) ? 6 : dayOfWeek - Calendar.MONDAY;
+        calendar.add(Calendar.DAY_OF_MONTH, -daysFromMonday);
         calendar.set(Calendar.HOUR_OF_DAY, 0);
         calendar.set(Calendar.MINUTE, 0);
         calendar.set(Calendar.SECOND, 0);

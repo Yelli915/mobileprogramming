@@ -12,7 +12,10 @@ import android.text.method.LinkMovementMethod;
 import android.text.style.ClickableSpan;
 import android.text.style.ForegroundColorSpan;
 import android.util.Log;
+import android.content.SharedPreferences;
+import android.text.TextUtils;
 import android.view.View;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -32,6 +35,8 @@ import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseAuthUserCollisionException;
+import com.google.firebase.auth.FirebaseAuthWeakPasswordException;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.firestore.DocumentReference;
@@ -58,6 +63,10 @@ public class LoginActivity extends AppCompatActivity {
     private boolean isSigningIn = false;
     private boolean isNavigating = false;
     private android.widget.Button googleSignInButton;
+    private com.google.android.material.textfield.TextInputEditText emailInput;
+    private com.google.android.material.textfield.TextInputEditText passwordInput;
+    private Button signInButton;
+    private Button signUpButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -73,6 +82,44 @@ public class LoginActivity extends AppCompatActivity {
                 new ActivityResultContracts.StartActivityForResult(),
                 this::handleSignInResult
         );
+
+        emailInput = findViewById(R.id.email_input);
+        passwordInput = findViewById(R.id.password_input);
+        signInButton = findViewById(R.id.sign_in_button);
+        signUpButton = findViewById(R.id.sign_up_button);
+        
+        // TextInputLayout 테두리 색상을 항상 흰색으로 유지
+        com.google.android.material.textfield.TextInputLayout emailInputLayout = findViewById(R.id.email_input_layout);
+        com.google.android.material.textfield.TextInputLayout passwordInputLayout = findViewById(R.id.password_input_layout);
+        
+        // 즉시 색상 설정 (레이아웃이 완전히 로드되기 전에도)
+        int whiteColor = getResources().getColor(R.color.accent_white, null);
+        if (emailInputLayout != null) {
+            emailInputLayout.setBoxStrokeColor(whiteColor);
+            // 텍스트 색상도 흰색으로 강제 설정
+            if (emailInput != null) {
+                emailInput.setTextColor(whiteColor);
+                emailInput.setHintTextColor(getResources().getColor(R.color.text_secondary, null));
+            }
+            setupTextInputLayoutStrokeColor(emailInputLayout);
+        }
+        if (passwordInputLayout != null) {
+            passwordInputLayout.setBoxStrokeColor(whiteColor);
+            // 텍스트 색상도 흰색으로 강제 설정
+            if (passwordInput != null) {
+                passwordInput.setTextColor(whiteColor);
+                passwordInput.setHintTextColor(getResources().getColor(R.color.text_secondary, null));
+            }
+            setupTextInputLayoutStrokeColor(passwordInputLayout);
+        }
+        
+        if (signInButton != null) {
+            signInButton.setOnClickListener(v -> signInWithEmailPassword());
+        }
+        
+        if (signUpButton != null) {
+            signUpButton.setOnClickListener(v -> signUpWithEmailPassword());
+        }
 
         googleSignInButton = findViewById(R.id.google_sign_in_button);
         if (googleSignInButton != null) {
@@ -141,6 +188,74 @@ public class LoginActivity extends AppCompatActivity {
                 dot.setAlpha(0.3f);
             }
         }
+    }
+
+    private void setupTextInputLayoutStrokeColor(com.google.android.material.textfield.TextInputLayout textInputLayout) {
+        int whiteColor = getResources().getColor(R.color.accent_white, null);
+        int hintColor = getResources().getColor(R.color.text_secondary, null);
+        
+        // ColorStateList 생성 - 모든 상태에서 흰색
+        android.content.res.ColorStateList whiteColorStateList = android.content.res.ColorStateList.valueOf(whiteColor);
+        
+        // 색상을 강제로 흰색으로 설정하는 함수 (포커스와 무관하게)
+        Runnable enforceWhiteColor = () -> {
+            // 1. 일반 방법
+            textInputLayout.setBoxStrokeColor(whiteColor);
+            
+            // 2. 리플렉션으로 boxStrokeColorStateList 설정
+            try {
+                java.lang.reflect.Method setBoxStrokeColorStateListMethod = 
+                    textInputLayout.getClass().getMethod("setBoxStrokeColorStateList", android.content.res.ColorStateList.class);
+                setBoxStrokeColorStateListMethod.invoke(textInputLayout, whiteColorStateList);
+            } catch (Exception e) {
+                // 리플렉션 실패 시 무시
+            }
+            
+            // 3. 리플렉션으로 내부 BoxBackgroundDrawable에 직접 접근
+            try {
+                java.lang.reflect.Field boxBackgroundField = textInputLayout.getClass().getDeclaredField("boxBackground");
+                boxBackgroundField.setAccessible(true);
+                Object boxBackground = boxBackgroundField.get(textInputLayout);
+                if (boxBackground != null) {
+                    // BoxBackgroundDrawable의 setStrokeColor 메서드 호출
+                    java.lang.reflect.Method setStrokeColorMethod = boxBackground.getClass().getMethod("setStrokeColor", android.content.res.ColorStateList.class);
+                    setStrokeColorMethod.invoke(boxBackground, whiteColorStateList);
+                }
+            } catch (Exception e) {
+                // 리플렉션 실패 시 무시
+            }
+            
+            // 4. 텍스트 색상 설정
+            if (textInputLayout.getEditText() != null) {
+                textInputLayout.getEditText().setTextColor(whiteColor);
+                textInputLayout.getEditText().setHintTextColor(hintColor);
+            }
+        };
+        
+        // 즉시 설정
+        enforceWhiteColor.run();
+        
+        // UI 스레드에서 설정
+        textInputLayout.post(enforceWhiteColor);
+        
+        // 레이아웃 완료 후 설정
+        textInputLayout.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                enforceWhiteColor.run();
+            }
+        });
+        
+        // 주기적으로 색상 강제 설정 (포커스 상태와 무관하게 항상 흰색)
+        android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+        Runnable periodicEnforce = new Runnable() {
+            @Override
+            public void run() {
+                enforceWhiteColor.run();
+                handler.postDelayed(this, 50); // 50ms마다 확인하여 항상 흰색 유지
+            }
+        };
+        handler.post(periodicEnforce);
     }
 
     private void setupTermsNotice() {
@@ -224,12 +339,19 @@ public class LoginActivity extends AppCompatActivity {
             navigateToMainActivity(false);
             return;
         }
+        
     }
 
     private void setSigningInState(boolean signingIn) {
         isSigningIn = signingIn;
         if (googleSignInButton != null) {
             googleSignInButton.setEnabled(!signingIn);
+        }
+        if (signInButton != null) {
+            signInButton.setEnabled(!signingIn);
+        }
+        if (signUpButton != null) {
+            signUpButton.setEnabled(!signingIn);
         }
     }
 
@@ -671,6 +793,133 @@ public class LoginActivity extends AppCompatActivity {
         Intent intent = new Intent(this, MainActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         return intent;
+    }
+
+    private void signInWithEmailPassword() {
+        if (emailInput == null || passwordInput == null) {
+            return;
+        }
+
+        String email = emailInput.getText().toString().trim();
+        String password = passwordInput.getText().toString();
+
+        if (TextUtils.isEmpty(email)) {
+            GoogleSignInUtils.showToast(this, getString(R.string.invalid_email));
+            return;
+        }
+
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            GoogleSignInUtils.showToast(this, getString(R.string.invalid_email));
+            return;
+        }
+
+        if (TextUtils.isEmpty(password) || password.length() < 6) {
+            GoogleSignInUtils.showToast(this, getString(R.string.invalid_password));
+            return;
+        }
+
+        if (!GoogleSignInUtils.isNetworkAvailable(this)) {
+            GoogleSignInUtils.showToast(this, "네트워크 연결을 확인해주세요.");
+            return;
+        }
+
+        if (isSigningIn) {
+            return;
+        }
+
+        setSigningInState(true);
+
+        firebaseAuth.signInWithEmailAndPassword(email, password)
+                .addOnCompleteListener(task -> {
+                    setSigningInState(false);
+                    if (task.isSuccessful()) {
+                        Log.d(TAG, "이메일/비밀번호 로그인 성공");
+                        FirebaseUser user = task.getResult().getUser();
+                        if (user != null) {
+                            updateUserInFirestore(user);
+                        }
+                    } else {
+                        Log.e(TAG, "이메일/비밀번호 로그인 실패", task.getException());
+                        String errorMessage = getString(R.string.email_password_login_failed);
+                        Exception exception = task.getException();
+                        if (exception != null) {
+                            String exceptionMsg = exception.getMessage();
+                            if (exceptionMsg != null) {
+                                if (exceptionMsg.contains("user-not-found") || 
+                                    exceptionMsg.contains("wrong-password")) {
+                                    errorMessage = getString(R.string.email_password_login_failed);
+                                } else if (exceptionMsg.contains("network")) {
+                                    errorMessage = "네트워크 연결을 확인해주세요.";
+                                }
+                            }
+                        }
+                        GoogleSignInUtils.showToast(this, errorMessage);
+                    }
+                });
+    }
+
+    private void signUpWithEmailPassword() {
+        if (emailInput == null || passwordInput == null) {
+            return;
+        }
+
+        String email = emailInput.getText().toString().trim();
+        String password = passwordInput.getText().toString();
+
+        if (TextUtils.isEmpty(email)) {
+            GoogleSignInUtils.showToast(this, getString(R.string.invalid_email));
+            return;
+        }
+
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            GoogleSignInUtils.showToast(this, getString(R.string.invalid_email));
+            return;
+        }
+
+        if (TextUtils.isEmpty(password) || password.length() < 6) {
+            GoogleSignInUtils.showToast(this, getString(R.string.invalid_password));
+            return;
+        }
+
+        if (!GoogleSignInUtils.isNetworkAvailable(this)) {
+            GoogleSignInUtils.showToast(this, "네트워크 연결을 확인해주세요.");
+            return;
+        }
+
+        if (isSigningIn) {
+            return;
+        }
+
+        setSigningInState(true);
+
+        firebaseAuth.createUserWithEmailAndPassword(email, password)
+                .addOnCompleteListener(task -> {
+                    setSigningInState(false);
+                    if (task.isSuccessful()) {
+                        Log.d(TAG, "이메일/비밀번호 회원가입 성공");
+                        FirebaseUser user = task.getResult().getUser();
+                        if (user != null) {
+                            updateUserInFirestore(user);
+                        }
+                    } else {
+                        Log.e(TAG, "이메일/비밀번호 회원가입 실패", task.getException());
+                        String errorMessage = getString(R.string.email_password_signup_failed);
+                        Exception exception = task.getException();
+                        if (exception != null) {
+                            if (exception instanceof FirebaseAuthUserCollisionException) {
+                                errorMessage = getString(R.string.email_already_in_use);
+                            } else if (exception instanceof FirebaseAuthWeakPasswordException) {
+                                errorMessage = getString(R.string.weak_password);
+                            } else {
+                                String exceptionMsg = exception.getMessage();
+                                if (exceptionMsg != null && exceptionMsg.contains("network")) {
+                                    errorMessage = "네트워크 연결을 확인해주세요.";
+                                }
+                            }
+                        }
+                        GoogleSignInUtils.showToast(this, errorMessage);
+                    }
+                });
     }
 
     @Override

@@ -108,6 +108,7 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
 
     private double totalDistance = 0.0;
     private Location lastLocation = null;
+    private long lastLocationTime = 0; // 마지막 위치 업데이트 시간 (순간 페이스 계산용)
     private Handler locationUpdateHandler = new Handler(Looper.getMainLooper());
     private Runnable locationUpdateRunnable = null;
     private float currentZoomLevel = 15f; // 현재 줌 레벨 저장 (15배율 고정)
@@ -1191,7 +1192,26 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
 
             totalDistance += distance / 1000.0;
             distanceTextView.setText(GoogleSignInUtils.formatDistanceKm(totalDistance));
+
+            // 순간 페이스 계산 (마지막 위치 업데이트와 현재 위치 간의 거리/시간)
+            if (lastLocationTime > 0) {
+                long timeDiff = newLocation.getTime() - lastLocationTime; // 밀리초
+                if (timeDiff > 0) {
+                    double timeHours = timeDiff / 3600000.0; // 시간 단위로 변환
+                    if (timeHours > 0) {
+                        double instantSpeedKmh = (distance / 1000.0) / timeHours;
+                        instantPace = instantSpeedKmh;
+                        currentPaceKmh = instantSpeedKmh; // 현재 페이스도 업데이트
+                        
+                        // 순간 페이스 표시 업데이트
+                        updateInstantPaceDisplay();
+                    }
+                }
+            }
         }
+
+        // 마지막 위치와 시간 업데이트
+        lastLocationTime = newLocation.getTime();
 
         if (routePoints.isEmpty() ||
                 lastLocation == null ||
@@ -1258,6 +1278,8 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
                 totalPausedTime = 0;
                 totalDistance = 0.0;
                 lastLocation = null;
+                lastLocationTime = 0; // 순간 페이스 계산용 시간 초기화
+                instantPace = 0.0; // 순간 페이스 초기화
                 routePoints.clear(); // 경로 초기화
                 
                 // 이탈 감지 상태 초기화
@@ -1448,19 +1470,28 @@ public class RunningStartActivity extends AppCompatActivity implements OnMapRead
             double elapsedHours = elapsedTime / 3600000.0;
             averagePace = totalDistance / elapsedHours;
 
-            // 현재 페이스를 km/h로 저장
-            currentPaceKmh = averagePace;
+            // 평균 페이스가 계산되면 현재 페이스로 사용 (순간 페이스가 없을 때)
+            if (instantPace <= 0) {
+                currentPaceKmh = averagePace;
+            }
 
             double averagePaceMinPerKm = 60.0 / averagePace;
             double averagePaceSeconds = averagePaceMinPerKm * 60.0;
             averagePaceTextView.setText(GoogleSignInUtils.formatPaceFromSeconds(averagePaceSeconds));
 
-            if (lastLocation != null) {
+            // 순간 페이스가 계산되지 않았으면 평균 페이스로 표시
+            if (instantPace <= 0 && lastLocation != null) {
                 instantPace = averagePace;
-                double instantPaceMinPerKm = 60.0 / instantPace;
-                double instantPaceSeconds = instantPaceMinPerKm * 60.0;
-                instantPaceTextView.setText(GoogleSignInUtils.formatPaceFromSeconds(instantPaceSeconds));
+                updateInstantPaceDisplay();
             }
+        }
+    }
+
+    private void updateInstantPaceDisplay() {
+        if (instantPace > 0 && instantPaceTextView != null) {
+            double instantPaceMinPerKm = 60.0 / instantPace;
+            double instantPaceSeconds = instantPaceMinPerKm * 60.0;
+            instantPaceTextView.setText(GoogleSignInUtils.formatPaceFromSeconds(instantPaceSeconds));
         }
     }
 

@@ -36,5 +36,11 @@
         <item name="android:textStyle">bold</item>
     </style>
 
+    <!-- TextInputLayout 커스텀 스타일 - 포커스와 무관하게 항상 흰색 -->
+    <style name="TextInputLayoutWhite" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+        <item name="boxStrokeColor">@color/accent_white</item>
+        <item name="hintTextColor">@color/text_secondary</item>
+    </style>
+
 </resources>
 
