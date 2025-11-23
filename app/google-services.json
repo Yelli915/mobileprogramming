@@ -18,11 +18,11 @@
           "client_type": 1,
           "android_info": {
             "package_name": "Run.U",
-            "certificate_hash": "adee9204cd901520484337997c24e632bac65026"
+            "certificate_hash": "44dd9a4b1fe1421683b9cdaed6448d35793eb3d8"
           }
         },
         {
-          "client_id": "686829230954-v39q83465pjc5je95e2p399426e57hke.apps.googleusercontent.com",
+          "client_id": "791975772437-5rmphs0obkfqc0q45jig3p72h7krbha3.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
@@ -35,7 +35,7 @@
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "686829230954-v39q83465pjc5je95e2p399426e57hke.apps.googleusercontent.com",
+              "client_id": "791975772437-5rmphs0obkfqc0q45jig3p72h7krbha3.apps.googleusercontent.com",
               "client_type": 3
             }
           ]
