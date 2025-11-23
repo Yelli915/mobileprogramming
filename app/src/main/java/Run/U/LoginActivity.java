@@ -88,6 +88,31 @@ public class LoginActivity extends AppCompatActivity {
         signInButton = findViewById(R.id.sign_in_button);
         signUpButton = findViewById(R.id.sign_up_button);
         
+        // TextInputLayout 테두리 색상을 항상 흰색으로 유지
+        com.google.android.material.textfield.TextInputLayout emailInputLayout = findViewById(R.id.email_input_layout);
+        com.google.android.material.textfield.TextInputLayout passwordInputLayout = findViewById(R.id.password_input_layout);
+        
+        // 즉시 색상 설정 (레이아웃이 완전히 로드되기 전에도)
+        int whiteColor = getResources().getColor(R.color.accent_white, null);
+        if (emailInputLayout != null) {
+            emailInputLayout.setBoxStrokeColor(whiteColor);
+            // 텍스트 색상도 흰색으로 강제 설정
+            if (emailInput != null) {
+                emailInput.setTextColor(whiteColor);
+                emailInput.setHintTextColor(getResources().getColor(R.color.text_secondary, null));
+            }
+            setupTextInputLayoutStrokeColor(emailInputLayout);
+        }
+        if (passwordInputLayout != null) {
+            passwordInputLayout.setBoxStrokeColor(whiteColor);
+            // 텍스트 색상도 흰색으로 강제 설정
+            if (passwordInput != null) {
+                passwordInput.setTextColor(whiteColor);
+                passwordInput.setHintTextColor(getResources().getColor(R.color.text_secondary, null));
+            }
+            setupTextInputLayoutStrokeColor(passwordInputLayout);
+        }
+        
         if (signInButton != null) {
             signInButton.setOnClickListener(v -> signInWithEmailPassword());
         }
@@ -163,6 +188,74 @@ public class LoginActivity extends AppCompatActivity {
                 dot.setAlpha(0.3f);
             }
         }
+    }
+
+    private void setupTextInputLayoutStrokeColor(com.google.android.material.textfield.TextInputLayout textInputLayout) {
+        int whiteColor = getResources().getColor(R.color.accent_white, null);
+        int hintColor = getResources().getColor(R.color.text_secondary, null);
+        
+        // ColorStateList 생성 - 모든 상태에서 흰색
+        android.content.res.ColorStateList whiteColorStateList = android.content.res.ColorStateList.valueOf(whiteColor);
+        
+        // 색상을 강제로 흰색으로 설정하는 함수 (포커스와 무관하게)
+        Runnable enforceWhiteColor = () -> {
+            // 1. 일반 방법
+            textInputLayout.setBoxStrokeColor(whiteColor);
+            
+            // 2. 리플렉션으로 boxStrokeColorStateList 설정
+            try {
+                java.lang.reflect.Method setBoxStrokeColorStateListMethod = 
+                    textInputLayout.getClass().getMethod("setBoxStrokeColorStateList", android.content.res.ColorStateList.class);
+                setBoxStrokeColorStateListMethod.invoke(textInputLayout, whiteColorStateList);
+            } catch (Exception e) {
+                // 리플렉션 실패 시 무시
+            }
+            
+            // 3. 리플렉션으로 내부 BoxBackgroundDrawable에 직접 접근
+            try {
+                java.lang.reflect.Field boxBackgroundField = textInputLayout.getClass().getDeclaredField("boxBackground");
+                boxBackgroundField.setAccessible(true);
+                Object boxBackground = boxBackgroundField.get(textInputLayout);
+                if (boxBackground != null) {
+                    // BoxBackgroundDrawable의 setStrokeColor 메서드 호출
+                    java.lang.reflect.Method setStrokeColorMethod = boxBackground.getClass().getMethod("setStrokeColor", android.content.res.ColorStateList.class);
+                    setStrokeColorMethod.invoke(boxBackground, whiteColorStateList);
+                }
+            } catch (Exception e) {
+                // 리플렉션 실패 시 무시
+            }
+            
+            // 4. 텍스트 색상 설정
+            if (textInputLayout.getEditText() != null) {
+                textInputLayout.getEditText().setTextColor(whiteColor);
+                textInputLayout.getEditText().setHintTextColor(hintColor);
+            }
+        };
+        
+        // 즉시 설정
+        enforceWhiteColor.run();
+        
+        // UI 스레드에서 설정
+        textInputLayout.post(enforceWhiteColor);
+        
+        // 레이아웃 완료 후 설정
+        textInputLayout.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                enforceWhiteColor.run();
+            }
+        });
+        
+        // 주기적으로 색상 강제 설정 (포커스 상태와 무관하게 항상 흰색)
+        android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+        Runnable periodicEnforce = new Runnable() {
+            @Override
+            public void run() {
+                enforceWhiteColor.run();
+                handler.postDelayed(this, 50); // 50ms마다 확인하여 항상 흰색 유지
+            }
+        };
+        handler.post(periodicEnforce);
     }
 
     private void setupTermsNotice() {

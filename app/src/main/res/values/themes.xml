@@ -3,6 +3,11 @@
     <style name="Base.Theme.RunU" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Customize your light theme here. -->
         <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <!-- TextInputLayout 기본 테두리 색상을 흰색으로 설정 -->
+        <item name="boxStrokeColor">@color/accent_white</item>
+        <!-- Material3 기본 색상 오버라이드 -->
+        <item name="colorOnSurface">@color/accent_white</item>
+        <item name="colorOutline">@color/accent_white</item>
     </style>
 
     <style name="Theme.RunU" parent="Base.Theme.RunU" />
