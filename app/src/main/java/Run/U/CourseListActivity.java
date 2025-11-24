@@ -87,42 +87,73 @@ public class CourseListActivity extends AppCompatActivity {
                     }
 
                     if (snapshot != null) {
-                        // 변경사항 처리
-                        for (DocumentChange dc : snapshot.getDocumentChanges()) {
-                            QueryDocumentSnapshot document = dc.getDocument();
-                            Course course = documentToCourse(document);
-                            
-                            if (course == null) {
-                                continue;
-                            }
-
-                            switch (dc.getType()) {
-                                case ADDED:
-                                    // 코스 추가
-                                    allCourses.add(course);
-                                    Log.d("CourseListActivity", "코스 추가됨: " + course.getName());
-                                    break;
-                                case MODIFIED:
-                                    // 코스 수정
-                                    for (int i = 0; i < allCourses.size(); i++) {
-                                        if (allCourses.get(i).getId().equals(course.getId())) {
-                                            allCourses.set(i, course);
-                                            Log.d("CourseListActivity", "코스 수정됨: " + course.getName());
-                                            break;
-                                        }
+                        // 초기 로드인지 확인 (getDocumentChanges가 비어있으면 초기 로드)
+                        if (snapshot.getDocumentChanges().isEmpty()) {
+                            // 초기 로드: 전체 리스트 다시 구성
+                            allCourses.clear();
+                            for (com.google.firebase.firestore.DocumentSnapshot document : snapshot.getDocuments()) {
+                                if (document instanceof QueryDocumentSnapshot) {
+                                    Course course = documentToCourse((QueryDocumentSnapshot) document);
+                                    if (course != null) {
+                                        allCourses.add(course);
                                     }
-                                    break;
-                                case REMOVED:
-                                    // 코스 삭제
-                                    allCourses.removeIf(c -> c.getId().equals(course.getId()));
-                                    Log.d("CourseListActivity", "코스 삭제됨: " + course.getName());
-                                    break;
+                                }
                             }
-                        }
+                            
+                            // 현재 선택된 카테고리로 필터링 업데이트
+                            if (selectedCategory != null) {
+                                filterCoursesByCategory(selectedCategory);
+                            } else {
+                                // 카테고리가 선택되지 않았으면 전체 표시
+                                filteredCourses.clear();
+                                filteredCourses.addAll(allCourses);
+                                setupRecyclerView();
+                                updateEmptyMessage();
+                            }
+                        } else {
+                            // 변경사항 처리
+                            for (DocumentChange dc : snapshot.getDocumentChanges()) {
+                                QueryDocumentSnapshot document = dc.getDocument();
+                                Course course = documentToCourse(document);
+                                
+                                if (course == null) {
+                                    continue;
+                                }
 
-                        // 현재 선택된 카테고리로 필터링 업데이트
-                        if (selectedCategory != null) {
-                            filterCoursesByCategory(selectedCategory);
+                                switch (dc.getType()) {
+                                    case ADDED:
+                                        // 코스 추가
+                                        allCourses.add(course);
+                                        Log.d("CourseListActivity", "코스 추가됨: " + course.getName());
+                                        break;
+                                    case MODIFIED:
+                                        // 코스 수정
+                                        for (int i = 0; i < allCourses.size(); i++) {
+                                            if (allCourses.get(i).getId().equals(course.getId())) {
+                                                allCourses.set(i, course);
+                                                Log.d("CourseListActivity", "코스 수정됨: " + course.getName());
+                                                break;
+                                            }
+                                        }
+                                        break;
+                                    case REMOVED:
+                                        // 코스 삭제
+                                        allCourses.removeIf(c -> c.getId().equals(course.getId()));
+                                        Log.d("CourseListActivity", "코스 삭제됨: " + course.getName());
+                                        break;
+                                }
+                            }
+
+                            // 현재 선택된 카테고리로 필터링 업데이트
+                            if (selectedCategory != null) {
+                                filterCoursesByCategory(selectedCategory);
+                            } else {
+                                // 카테고리가 선택되지 않았으면 전체 표시
+                                filteredCourses.clear();
+                                filteredCourses.addAll(allCourses);
+                                setupRecyclerView();
+                                updateEmptyMessage();
+                            }
                         }
                     }
                 });

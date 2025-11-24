@@ -46,7 +46,10 @@
                 android:text="2023년 10월 1일"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="?attr/colorOnSurface" />
+                android:textColor="#000000"
+                android:visibility="visible"
+                android:ellipsize="end"
+                android:maxLines="1" />
 
             <!-- 난이도 배지 -->
             <TextView
@@ -61,7 +64,7 @@
                 android:paddingTop="6dp"
                 android:paddingBottom="6dp"
                 android:background="@drawable/badge_background"
-                android:textColor="#FFFFFF"
+                android:textColor="#000000"
                 android:visibility="gone"
                 android:layout_marginEnd="8dp" />
 
@@ -79,7 +82,7 @@
                 android:paddingTop="6dp"
                 android:paddingBottom="6dp"
                 android:background="@drawable/badge_background"
-                android:textColor="#FFFFFF" />
+                android:textColor="#000000" />
 
         </LinearLayout>
 
@@ -114,15 +117,16 @@
                     android:textColor="?attr/colorOnSurfaceVariant"
                     android:layout_marginBottom="4dp" />
 
-                        <TextView
-                            android:id="@+id/tv_record_distance"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="10.0km"
-                            android:textSize="20sp"
-                            android:textStyle="bold"
-                            android:textColor="#FF6B35"
-                            android:gravity="center" />
+                <TextView
+                    android:id="@+id/tv_record_distance"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="10.0km"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:textColor="#FF6B35"
+                    android:gravity="center"
+                    android:visibility="visible" />
 
             </LinearLayout>
 
@@ -154,8 +158,9 @@
                     android:text="50분"
                     android:textSize="20sp"
                     android:textStyle="bold"
-                    android:textColor="?attr/colorOnSurface"
-                    android:gravity="center" />
+                    android:textColor="#000000"
+                    android:gravity="center"
+                    android:visibility="visible" />
 
             </LinearLayout>
 
@@ -187,8 +192,9 @@
                     android:text="5:00/km"
                     android:textSize="20sp"
                     android:textStyle="bold"
-                    android:textColor="?attr/colorOnSurface"
-                    android:gravity="center" />
+                    android:textColor="#000000"
+                    android:gravity="center"
+                    android:visibility="visible" />
 
             </LinearLayout>
 

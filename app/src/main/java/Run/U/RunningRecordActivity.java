@@ -391,51 +391,60 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
                 record.setTotalDistanceKm(document.getDouble("totalDistanceKm"));
             }
             
-            // totalTime (초) → elapsedTimeMs (ms) 변환
+            // elapsedTimeMs 설정 (우선순위: totalTime > elapsedTimeMs > startTime/endTime 계산)
+            long elapsedTimeMs = 0;
             if (document.contains("totalTime")) {
                 Long totalTimeSeconds = document.getLong("totalTime");
                 if (totalTimeSeconds != null) {
-                    record.setElapsedTimeMs(totalTimeSeconds * 1000);
+                    elapsedTimeMs = totalTimeSeconds * 1000;
+                    record.setElapsedTimeMs(elapsedTimeMs);
                 }
             } else if (document.contains("elapsedTimeMs")) {
-                // 호환성을 위해 기존 필드도 지원
                 Long elapsedTime = document.getLong("elapsedTimeMs");
                 if (elapsedTime != null) {
-                    record.setElapsedTimeMs(elapsedTime);
+                    elapsedTimeMs = elapsedTime;
+                    record.setElapsedTimeMs(elapsedTimeMs);
                 }
             }
             
-            // averagePace (숫자 초) → 문자열 변환
-            if (document.contains("averagePace")) {
-                Object paceObj = document.get("averagePace");
-                if (paceObj instanceof Number) {
-                    // 숫자 타입인 경우 문자열로 변환
-                    double paceSeconds = ((Number) paceObj).doubleValue();
-                    record.setAveragePace(GoogleSignInUtils.formatPaceFromSeconds(paceSeconds));
-                } else if (paceObj instanceof String) {
-                    // 문자열 타입인 경우 그대로 사용 (호환성)
-                    record.setAveragePace((String) paceObj);
-                }
-            }
-            
-            // startTime, endTime으로부터 time 문자열 생성
-            if (document.contains("startTime") && document.contains("endTime")) {
+            // startTime과 endTime으로부터 시간 계산 (elapsedTimeMs가 없을 경우)
+            if (elapsedTimeMs == 0 && document.contains("startTime") && document.contains("endTime")) {
                 Object startTimeObj = document.get("startTime");
                 Object endTimeObj = document.get("endTime");
                 if (startTimeObj instanceof com.google.firebase.Timestamp && 
                     endTimeObj instanceof com.google.firebase.Timestamp) {
                     long startMs = ((com.google.firebase.Timestamp) startTimeObj).toDate().getTime();
                     long endMs = ((com.google.firebase.Timestamp) endTimeObj).toDate().getTime();
-                    long durationMs = endMs - startMs;
-                    
-                    record.setTime(GoogleSignInUtils.formatElapsedTimeShort(durationMs));
+                    elapsedTimeMs = endMs - startMs;
+                    record.setElapsedTimeMs(elapsedTimeMs);
+                    record.setTime(GoogleSignInUtils.formatElapsedTimeShort(elapsedTimeMs));
                 }
             } else if (document.contains("time")) {
-                // 호환성을 위해 기존 필드도 지원
                 record.setTime(document.getString("time"));
+            } else if (elapsedTimeMs > 0) {
+                // elapsedTimeMs가 있으면 시간 문자열 생성
+                record.setTime(GoogleSignInUtils.formatElapsedTimeShort(elapsedTimeMs));
             }
             
-            // startTime으로부터 date 문자열 생성
+            // averagePace 설정 (우선순위: averagePace 필드 > 계산)
+            if (document.contains("averagePace")) {
+                Object paceObj = document.get("averagePace");
+                if (paceObj instanceof Number) {
+                    double paceSeconds = ((Number) paceObj).doubleValue();
+                    record.setAveragePace(GoogleSignInUtils.formatPaceFromSeconds(paceSeconds));
+                } else if (paceObj instanceof String) {
+                    record.setAveragePace((String) paceObj);
+                }
+            } else {
+                // averagePace가 없으면 totalTime과 totalDistance로부터 계산
+                if (elapsedTimeMs > 0 && record.getTotalDistanceKm() > 0) {
+                    double totalTimeSeconds = elapsedTimeMs / 1000.0;
+                    double paceSeconds = totalTimeSeconds / record.getTotalDistanceKm();
+                    record.setAveragePace(GoogleSignInUtils.formatPaceFromSeconds(paceSeconds));
+                }
+            }
+            
+            // 날짜 설정 (우선순위: startTime > date > createdAt)
             if (document.contains("startTime")) {
                 Object startTimeObj = document.get("startTime");
                 if (startTimeObj instanceof com.google.firebase.Timestamp) {
@@ -444,8 +453,15 @@ public class RunningRecordActivity extends AppCompatActivity implements OnMapRea
                     record.setDate(sdf.format(date));
                 }
             } else if (document.contains("date")) {
-                // 호환성을 위해 기존 필드도 지원
                 record.setDate(document.getString("date"));
+            } else if (document.contains("createdAt")) {
+                // createdAt이 있으면 날짜로 사용
+                Object createdAt = document.get("createdAt");
+                if (createdAt instanceof com.google.firebase.Timestamp) {
+                    java.util.Date date = ((com.google.firebase.Timestamp) createdAt).toDate();
+                    java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy년 MM월 dd일", java.util.Locale.KOREA);
+                    record.setDate(sdf.format(date));
+                }
             }
             
             // totalDistanceKm으로부터 distance 문자열 생성

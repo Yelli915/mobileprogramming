@@ -26,7 +26,7 @@
             android:gravity="center_vertical"
             app:navigationIcon="@drawable/ic_arrow_back"
             app:title="러닝 코스 선택"
-            app:titleTextColor="?attr/colorOnSurface"
+            app:titleTextColor="#000000"
             app:titleMarginTop="0dp" />
 
     </com.google.android.material.appbar.AppBarLayout>
@@ -62,7 +62,7 @@
                         android:text="추천 코스"
                         android:textSize="22sp"
                         android:textStyle="bold"
-                        android:textColor="?attr/colorOnSurface" />
+                        android:textColor="#000000" />
 
                     <TextView
                         android:id="@+id/btnMoreCourses"
@@ -111,7 +111,7 @@
                         android:text="코스 미리보기"
                         android:textSize="16sp"
                         android:textStyle="bold"
-                        android:textColor="?attr/colorOnSurface"
+                        android:textColor="#000000"
                         android:padding="16dp"
                         android:paddingBottom="8dp" />
 
@@ -147,7 +147,7 @@
                         android:text="코스 정보"
                         android:textSize="16sp"
                         android:textStyle="bold"
-                        android:textColor="?attr/colorOnSurface"
+                        android:textColor="#000000"
                         android:layout_marginBottom="16dp" />
 
                     <LinearLayout
@@ -179,7 +179,7 @@
                                 android:layout_height="wrap_content"
                                 android:text="총 거리"
                                 android:textSize="12sp"
-                                android:textColor="?attr/colorOnSurfaceVariant"
+                                android:textColor="#666666"
                                 android:layout_marginBottom="4dp" />
 
                             <TextView
@@ -189,7 +189,7 @@
                                 android:text="5.0km"
                                 android:textSize="20sp"
                                 android:textStyle="bold"
-                                android:textColor="?attr/colorOnSurface" />
+                                android:textColor="#000000" />
 
                         </LinearLayout>
 
@@ -216,7 +216,7 @@
                                 android:layout_height="wrap_content"
                                 android:text="예상 시간"
                                 android:textSize="12sp"
-                                android:textColor="?attr/colorOnSurfaceVariant"
+                                android:textColor="#666666"
                                 android:layout_marginBottom="4dp" />
 
                             <TextView
@@ -226,7 +226,7 @@
                                 android:text="30분"
                                 android:textSize="20sp"
                                 android:textStyle="bold"
-                                android:textColor="?attr/colorOnSurface" />
+                                android:textColor="#000000" />
 
                         </LinearLayout>
 
@@ -252,7 +252,7 @@
                                 android:layout_height="wrap_content"
                                 android:text="난이도"
                                 android:textSize="12sp"
-                                android:textColor="?attr/colorOnSurfaceVariant"
+                                android:textColor="#666666"
                                 android:layout_marginBottom="4dp" />
 
                             <TextView
@@ -262,7 +262,7 @@
                                 android:text="중급"
                                 android:textSize="20sp"
                                 android:textStyle="bold"
-                                android:textColor="?attr/colorOnSurface" />
+                                android:textColor="#000000" />
 
                         </LinearLayout>
 

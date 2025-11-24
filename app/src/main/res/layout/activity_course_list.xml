@@ -24,7 +24,7 @@
             android:gravity="center_vertical"
             app:navigationIcon="@drawable/ic_arrow_back"
             app:title="코스 목록"
-            app:titleTextColor="?attr/colorOnSurface"
+            app:titleTextColor="#000000"
             app:titleMarginTop="0dp" />
 
     </com.google.android.material.appbar.AppBarLayout>
@@ -108,7 +108,7 @@
                 android:padding="24dp"
                 android:text="선택한 카테고리의 코스가 없습니다."
                 android:textSize="16sp"
-                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textColor="#666666"
                 android:gravity="center"
                 android:visibility="gone" />
 
