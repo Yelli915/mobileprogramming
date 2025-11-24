@@ -58,6 +58,18 @@ public class AllRecordsActivity extends AppCompatActivity {
         initViews();
         initFirestore();
         setupClickListeners();
+        // 초기 빈 어댑터 설정 (레이아웃 그리기 전에 어댑터 연결)
+        if (recordRecyclerView != null) {
+            recordAdapter = new RunningRecordAdapter(new ArrayList<>(), record -> {});
+            recordAdapter.setOnItemLongClickListener(record -> {
+                // 길게 누르면 삭제/수정 다이얼로그 표시
+                showRunRecordOptionsDialog(record);
+            });
+            recordAdapter.setCourseNameCache(courseNameCache);
+            recordRecyclerView.setLayoutManager(new androidx.recyclerview.widget.LinearLayoutManager(this));
+            recordRecyclerView.setAdapter(recordAdapter);
+            recordRecyclerView.setNestedScrollingEnabled(false);
+        }
         loadAllRecordsFromFirestore();
         loadCourseDifficulties(null); // 코스 난이도 정보 미리 로드
     }
@@ -210,6 +222,8 @@ public class AllRecordsActivity extends AppCompatActivity {
                     }
 
                     if (snapshot != null) {
+                        Log.d("AllRecordsActivity", "Firestore 스냅샷 수신 - 문서 수: " + snapshot.size() + ", 변경사항 수: " + snapshot.getDocumentChanges().size());
+                        
                         // 초기 로드인지 확인
                         if (snapshot.getDocumentChanges().isEmpty()) {
                             // 초기 로드: 전체 리스트 다시 구성
@@ -219,10 +233,26 @@ public class AllRecordsActivity extends AppCompatActivity {
                                     RunningRecord record = documentToRunningRecord((QueryDocumentSnapshot) document);
                                     if (record != null) {
                                         allRecords.add(record);
+                                        Log.d("AllRecordsActivity", "기록 변환 성공 - ID: " + record.getId() + 
+                                            ", 거리: " + record.getTotalDistanceKm() + 
+                                            ", 시간: " + record.getElapsedTimeMs() + 
+                                            ", 날짜: " + record.getDate());
+                                    } else {
+                                        Log.w("AllRecordsActivity", "기록 변환 실패 - 문서 ID: " + document.getId());
                                     }
                                 }
                             }
                             allRecords.sort((r1, r2) -> Long.compare(r2.getCreatedAt(), r1.getCreatedAt()));
+                            
+                            Log.d("AllRecordsActivity", "로드된 기록 수: " + allRecords.size());
+                            if (!allRecords.isEmpty()) {
+                                RunningRecord first = allRecords.get(0);
+                                Log.d("AllRecordsActivity", "첫 번째 기록 - 거리: " + first.getTotalDistanceKm() + 
+                                    ", 시간: " + first.getElapsedTimeMs() + 
+                                    ", 날짜: " + first.getDate() + 
+                                    ", 난이도: " + first.getDifficulty() +
+                                    ", 페이스: " + first.getAveragePace());
+                            }
                             
                             applyCurrentFilter();
                         } else {
@@ -272,52 +302,89 @@ public class AllRecordsActivity extends AppCompatActivity {
                 record.setRunningType(document.getString("runningType"));
             }
             
+            // 거리 설정 (우선순위: totalDistance > totalDistanceKm > distance)
+            double totalDistanceKm = 0.0;
             if (document.contains("totalDistance")) {
                 Double totalDistanceMeters = document.getDouble("totalDistance");
-                if (totalDistanceMeters != null) {
-                    record.setTotalDistanceKm(totalDistanceMeters / 1000.0);
+                if (totalDistanceMeters != null && totalDistanceMeters > 0) {
+                    totalDistanceKm = totalDistanceMeters / 1000.0;
+                    record.setTotalDistanceKm(totalDistanceKm);
                 }
-            } else if (document.contains("totalDistanceKm")) {
-                record.setTotalDistanceKm(document.getDouble("totalDistanceKm"));
+            }
+            if (totalDistanceKm == 0.0 && document.contains("totalDistanceKm")) {
+                Double distanceKm = document.getDouble("totalDistanceKm");
+                if (distanceKm != null && distanceKm > 0) {
+                    totalDistanceKm = distanceKm;
+                    record.setTotalDistanceKm(totalDistanceKm);
+                }
             }
             
+            // elapsedTimeMs 설정 (우선순위: totalTime > elapsedTimeMs > startTime/endTime 계산)
+            long elapsedTimeMs = 0;
             if (document.contains("totalTime")) {
                 Long totalTimeSeconds = document.getLong("totalTime");
-                if (totalTimeSeconds != null) {
-                    record.setElapsedTimeMs(totalTimeSeconds * 1000);
+                if (totalTimeSeconds != null && totalTimeSeconds > 0) {
+                    elapsedTimeMs = totalTimeSeconds * 1000;
+                    record.setElapsedTimeMs(elapsedTimeMs);
                 }
-            } else if (document.contains("elapsedTimeMs")) {
+            }
+            if (elapsedTimeMs == 0 && document.contains("elapsedTimeMs")) {
                 Long elapsedTime = document.getLong("elapsedTimeMs");
-                if (elapsedTime != null) {
-                    record.setElapsedTimeMs(elapsedTime);
+                if (elapsedTime != null && elapsedTime > 0) {
+                    elapsedTimeMs = elapsedTime;
+                    record.setElapsedTimeMs(elapsedTimeMs);
                 }
             }
             
-            if (document.contains("averagePace")) {
-                Object paceObj = document.get("averagePace");
-                if (paceObj instanceof Number) {
-                    double paceSeconds = ((Number) paceObj).doubleValue();
-                    record.setAveragePace(GoogleSignInUtils.formatPaceFromSeconds(paceSeconds));
-                } else if (paceObj instanceof String) {
-                    record.setAveragePace((String) paceObj);
-                }
-            }
-            
-            if (document.contains("startTime") && document.contains("endTime")) {
+            // startTime과 endTime으로부터 시간 계산 (elapsedTimeMs가 없을 경우)
+            if (elapsedTimeMs == 0 && document.contains("startTime") && document.contains("endTime")) {
                 Object startTimeObj = document.get("startTime");
                 Object endTimeObj = document.get("endTime");
                 if (startTimeObj instanceof com.google.firebase.Timestamp && 
                     endTimeObj instanceof com.google.firebase.Timestamp) {
                     long startMs = ((com.google.firebase.Timestamp) startTimeObj).toDate().getTime();
                     long endMs = ((com.google.firebase.Timestamp) endTimeObj).toDate().getTime();
-                    long durationMs = endMs - startMs;
-                    
-                    record.setTime(GoogleSignInUtils.formatElapsedTimeShort(durationMs));
+                    if (endMs > startMs) {
+                        elapsedTimeMs = endMs - startMs;
+                        record.setElapsedTimeMs(elapsedTimeMs);
+                    }
                 }
-            } else if (document.contains("time")) {
-                record.setTime(document.getString("time"));
             }
             
+            // 시간 문자열 설정
+            if (elapsedTimeMs > 0) {
+                record.setTime(GoogleSignInUtils.formatElapsedTimeShort(elapsedTimeMs));
+            } else if (document.contains("time")) {
+                String timeStr = document.getString("time");
+                if (timeStr != null && !timeStr.trim().isEmpty()) {
+                    record.setTime(timeStr);
+                }
+            }
+            
+            // averagePace 설정 (우선순위: averagePace 필드 > 계산)
+            if (document.contains("averagePace")) {
+                Object paceObj = document.get("averagePace");
+                if (paceObj instanceof Number) {
+                    double paceSeconds = ((Number) paceObj).doubleValue();
+                    if (paceSeconds > 0) {
+                        record.setAveragePace(GoogleSignInUtils.formatPaceFromSeconds(paceSeconds));
+                    }
+                } else if (paceObj instanceof String) {
+                    String paceStr = (String) paceObj;
+                    if (paceStr != null && !paceStr.trim().isEmpty()) {
+                        record.setAveragePace(paceStr);
+                    }
+                }
+            }
+            
+            // averagePace가 없으면 totalTime과 totalDistance로부터 계산
+            if (record.getAveragePace() == null && elapsedTimeMs > 0 && totalDistanceKm > 0) {
+                double totalTimeSeconds = elapsedTimeMs / 1000.0;
+                double paceSeconds = totalTimeSeconds / totalDistanceKm;
+                record.setAveragePace(GoogleSignInUtils.formatPaceFromSeconds(paceSeconds));
+            }
+            
+            // 날짜 설정 (우선순위: startTime > date > createdAt)
             if (document.contains("startTime")) {
                 Object startTimeObj = document.get("startTime");
                 if (startTimeObj instanceof com.google.firebase.Timestamp) {
@@ -326,17 +393,30 @@ public class AllRecordsActivity extends AppCompatActivity {
                     record.setDate(sdf.format(date));
                 }
             } else if (document.contains("date")) {
-                record.setDate(document.getString("date"));
+                String dateStr = document.getString("date");
+                if (dateStr != null && !dateStr.trim().isEmpty()) {
+                    record.setDate(dateStr);
+                }
             }
             
-            if (document.contains("totalDistance")) {
-                Double totalDistanceMeters = document.getDouble("totalDistance");
-                if (totalDistanceMeters != null) {
-                    double distanceKm = totalDistanceMeters / 1000.0;
-                    record.setDistance(GoogleSignInUtils.formatDistanceKm(distanceKm));
+            // 날짜가 아직 설정되지 않았으면 createdAt 사용
+            if (record.getDate() == null && document.contains("createdAt")) {
+                Object createdAt = document.get("createdAt");
+                if (createdAt instanceof com.google.firebase.Timestamp) {
+                    java.util.Date date = ((com.google.firebase.Timestamp) createdAt).toDate();
+                    java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy년 MM월 dd일", java.util.Locale.KOREA);
+                    record.setDate(sdf.format(date));
                 }
+            }
+            
+            // distance 문자열 설정 (포맷팅된 거리)
+            if (totalDistanceKm > 0) {
+                record.setDistance(GoogleSignInUtils.formatDistanceKm(totalDistanceKm));
             } else if (document.contains("distance")) {
-                record.setDistance(document.getString("distance"));
+                String distanceStr = document.getString("distance");
+                if (distanceStr != null && !distanceStr.trim().isEmpty()) {
+                    record.setDistance(distanceStr);
+                }
             }
             
             if (document.contains("pathEncoded")) {
@@ -347,6 +427,7 @@ public class AllRecordsActivity extends AppCompatActivity {
                 record.setCourseId(document.getString("courseId"));
             }
             
+            // createdAt 설정 (우선순위: createdAt > startTime)
             if (document.contains("createdAt")) {
                 Object createdAt = document.get("createdAt");
                 if (createdAt instanceof com.google.firebase.Timestamp) {
@@ -366,6 +447,13 @@ public class AllRecordsActivity extends AppCompatActivity {
             if (document.contains("difficulty")) {
                 record.setDifficulty(document.getString("difficulty"));
             }
+            
+            Log.d("AllRecordsActivity", "기록 변환 완료 - ID: " + record.getId() + 
+                ", 거리: " + record.getTotalDistanceKm() + 
+                ", 시간: " + record.getElapsedTimeMs() + 
+                ", 날짜: " + record.getDate() + 
+                ", 난이도: " + record.getDifficulty() +
+                ", 페이스: " + record.getAveragePace());
             
             return record;
         } catch (Exception e) {
@@ -509,6 +597,8 @@ public class AllRecordsActivity extends AppCompatActivity {
     private void applyCurrentFilter() {
         filteredRecords.clear();
         
+        Log.d("AllRecordsActivity", "applyCurrentFilter 호출 - 필터: " + currentFilter + ", 전체 기록 수: " + allRecords.size());
+        
         switch (currentFilter) {
             case "date":
                 // 날짜별 필터 적용
@@ -545,6 +635,8 @@ public class AllRecordsActivity extends AppCompatActivity {
                 filteredRecords.addAll(allRecords);
                 break;
         }
+        
+        Log.d("AllRecordsActivity", "필터 적용 완료 - 필터된 기록 수: " + filteredRecords.size());
         
         // 필터가 변경되면 어댑터를 다시 생성하여 filteredRecords 반영
         setupRecyclerView();
@@ -808,19 +900,36 @@ public class AllRecordsActivity extends AppCompatActivity {
     }
 
     private void setupRecyclerView() {
-        // 필터가 변경될 때마다 어댑터를 다시 생성하여 filteredRecords를 반영
-        recordAdapter = new RunningRecordAdapter(filteredRecords, record -> {
-            // 기록 클릭 시 상세 보기 (선택사항)
-        });
-        recordAdapter.setOnItemLongClickListener(record -> {
-            // 길게 누르면 삭제/수정 다이얼로그 표시
-            showRunRecordOptionsDialog(record);
-        });
+        if (recordRecyclerView == null) {
+            return;
+        }
         
-        // 코스 이름 캐시 설정
-        recordAdapter.setCourseNameCache(courseNameCache);
-        
-        GoogleSignInUtils.setupRecyclerView(recordRecyclerView, recordAdapter, this);
+        // 기존 어댑터가 있으면 데이터만 업데이트
+        if (recordAdapter != null) {
+            recordAdapter.updateRecords(filteredRecords);
+            recordAdapter.setOnItemLongClickListener(record -> {
+                // 길게 누르면 삭제/수정 다이얼로그 표시
+                showRunRecordOptionsDialog(record);
+            });
+            recordAdapter.setCourseNameCache(courseNameCache);
+        } else {
+            // 어댑터가 없으면 새로 생성
+            recordAdapter = new RunningRecordAdapter(filteredRecords, record -> {
+                // 기록 클릭 시 상세 보기 (선택사항)
+            });
+            recordAdapter.setOnItemLongClickListener(record -> {
+                // 길게 누르면 삭제/수정 다이얼로그 표시
+                showRunRecordOptionsDialog(record);
+            });
+            
+            // 코스 이름 캐시 설정
+            recordAdapter.setCourseNameCache(courseNameCache);
+            
+            // RecyclerView 설정
+            recordRecyclerView.setLayoutManager(new androidx.recyclerview.widget.LinearLayoutManager(this));
+            recordRecyclerView.setAdapter(recordAdapter);
+            recordRecyclerView.setNestedScrollingEnabled(false);
+        }
         
         // 코스 이름 로드 (스케치 러닝인 경우)
         loadCourseNamesForRecords();

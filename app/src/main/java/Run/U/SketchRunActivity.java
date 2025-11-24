@@ -135,61 +135,78 @@ public class SketchRunActivity extends AppCompatActivity implements OnMapReadyCa
                     }
 
                     if (snapshot != null) {
-                        // 변경사항 처리
-                        for (DocumentChange dc : snapshot.getDocumentChanges()) {
-                            QueryDocumentSnapshot document = dc.getDocument();
-                            Course course = documentToCourse(document);
+                        // 초기 로드인지 확인 (getDocumentChanges가 비어있으면 초기 로드)
+                        if (snapshot.getDocumentChanges().isEmpty()) {
+                            // 초기 로드: 전체 리스트 다시 구성
+                            allCourses.clear();
+                            for (com.google.firebase.firestore.DocumentSnapshot document : snapshot.getDocuments()) {
+                                if (document instanceof QueryDocumentSnapshot) {
+                                    Course course = documentToCourse((QueryDocumentSnapshot) document);
+                                    if (course != null) {
+                                        allCourses.add(course);
+                                    }
+                                }
+                            }
                             
-                            if (course == null) {
-                                continue;
-                            }
+                            // 추천 코스 업데이트
+                            updateRecommendedCourses();
+                        } else {
+                            // 변경사항 처리
+                            for (DocumentChange dc : snapshot.getDocumentChanges()) {
+                                QueryDocumentSnapshot document = dc.getDocument();
+                                Course course = documentToCourse(document);
+                                
+                                if (course == null) {
+                                    continue;
+                                }
 
-                            switch (dc.getType()) {
-                                case ADDED:
-                                    // 코스 추가
-                                    allCourses.add(course);
-                                    Log.d("SketchRunActivity", "코스 추가됨: " + course.getName());
-                                    break;
-                                case MODIFIED:
-                                    // 코스 수정
-                                    for (int i = 0; i < allCourses.size(); i++) {
-                                        if (allCourses.get(i).getId().equals(course.getId())) {
-                                            allCourses.set(i, course);
-                                            Log.d("SketchRunActivity", "코스 수정됨: " + course.getName());
-                                            
-                                            // 현재 선택된 코스가 수정된 경우 업데이트
-                                            if (selectedCourse != null && selectedCourse.getId().equals(course.getId())) {
-                                                selectedCourse = course;
-                                                updateCourseInfo(course);
-                                                if (map != null) {
-                                                    displayCoursePathOnMap(course);
+                                switch (dc.getType()) {
+                                    case ADDED:
+                                        // 코스 추가
+                                        allCourses.add(course);
+                                        Log.d("SketchRunActivity", "코스 추가됨: " + course.getName());
+                                        break;
+                                    case MODIFIED:
+                                        // 코스 수정
+                                        for (int i = 0; i < allCourses.size(); i++) {
+                                            if (allCourses.get(i).getId().equals(course.getId())) {
+                                                allCourses.set(i, course);
+                                                Log.d("SketchRunActivity", "코스 수정됨: " + course.getName());
+                                                
+                                                // 현재 선택된 코스가 수정된 경우 업데이트
+                                                if (selectedCourse != null && selectedCourse.getId().equals(course.getId())) {
+                                                    selectedCourse = course;
+                                                    updateCourseInfo(course);
+                                                    if (map != null) {
+                                                        displayCoursePathOnMap(course);
+                                                    }
                                                 }
+                                                break;
                                             }
-                                            break;
                                         }
-                                    }
-                                    break;
-                                case REMOVED:
-                                    // 코스 삭제
-                                    allCourses.removeIf(c -> c.getId().equals(course.getId()));
-                                    Log.d("SketchRunActivity", "코스 삭제됨: " + course.getName());
-                                    
-                                    // 현재 선택된 코스가 삭제된 경우
-                                    if (selectedCourse != null && selectedCourse.getId().equals(course.getId())) {
-                                        selectedCourse = null;
-                                        tvCourseTotalDistance.setText("--");
-                                        tvCourseEstimatedTime.setText("--");
-                                        tvDifficulty.setText("--");
-                                        if (map != null) {
-                                            map.clear();
+                                        break;
+                                    case REMOVED:
+                                        // 코스 삭제
+                                        allCourses.removeIf(c -> c.getId().equals(course.getId()));
+                                        Log.d("SketchRunActivity", "코스 삭제됨: " + course.getName());
+                                        
+                                        // 현재 선택된 코스가 삭제된 경우
+                                        if (selectedCourse != null && selectedCourse.getId().equals(course.getId())) {
+                                            selectedCourse = null;
+                                            tvCourseTotalDistance.setText("--");
+                                            tvCourseEstimatedTime.setText("--");
+                                            tvDifficulty.setText("--");
+                                            if (map != null) {
+                                                map.clear();
+                                            }
                                         }
-                                    }
-                                    break;
+                                        break;
+                                }
                             }
-                        }
 
-                        // 추천 코스 업데이트
-                        updateRecommendedCourses();
+                            // 추천 코스 업데이트
+                            updateRecommendedCourses();
+                        }
                     }
                 });
     }
